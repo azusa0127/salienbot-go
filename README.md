@@ -36,7 +36,7 @@ docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go")
 替换以下命令中的`你的TOKEN`和`可执行文件名`
 Linux/Mac
 ```bash
-STEAM_TOKEN=你的TOKEN 可执行文件名
+STEAM_TOKEN=你的TOKEN ./可执行文件名
 ```
 
 Windows
@@ -54,4 +54,21 @@ STEAM_TOKEN=你的TOKEN go run main.go
 Windows
 ```bash
 cmd /C "set STEAM_TOKEN=你的TOKEN && go run .\main.go"
+```
+
+## 设置HTTPS代理
+go使用`HTTP_PROXY`环境变量设置http代理, 所以只需要添加`HTTP_PROXY`环境变量值即可
+docker
+```bash
+docker run -d -e "STEAM_TOKEN=你的TOKEN" -e "HTTP_PROXY=代理服务器地址和端口" azusa0127/salienbot-go
+```
+
+Mac/Linux
+```bash
+STEAM_TOKEN=你的TOKEN HTTP_PROXY=代理服务器地址和端口 ./可执行文件名
+```
+
+Windows
+```bash
+cmd /C "set STEAM_TOKEN=你的TOKEN && HTTP_PROXY=代理服务器地址和端口 && 可执行文件名"
 ```
