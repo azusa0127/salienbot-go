@@ -103,7 +103,9 @@ func joinZone(zone *Zone) error {
 
 func submitScore(zone *Zone) (string, error) {
 	// Validate planet change
-	if p, _ := getPlayerInfo(); p.ActiveZoneGame == "" {
+	if p, err := getPlayerInfo(); err != nil {
+		return "", err
+	} else if p.ActiveZoneGame == "" {
 		return "", errors.New("Planet changed, retry in 5")
 	}
 	var score string
