@@ -1,8 +1,11 @@
 # Steam 2018 夏促刷分辅助 - golang
 
+[更新 0.0.2 - 星球热切换支持]
+
 - 自动恢复现有游戏
 - 超精简, 单文件, 无依赖
 - 占领进程信息输出
+- [0.0.2] 支持热切换星球, 网页切换星球后脚本将重新寻找适合星球
 
 创意的方法来源于 MapleRecall https://steamcn.com/t399390-1-1
 
@@ -11,7 +14,17 @@
 - 浏览器打开 https://steamcommunity.com/saliengame/gettoken 获取 token
 - 用以下任一启动方式启动脚本
 
+# 注意事项
+- 0.0.1 版本热切换星球会报错, 请更新0.0.2版本或者切换星球后重新运行工具
+- 仅供学习参考, 作者不对任何使用此工具造成的任何问题负责
+
 ## Docker 启动 (推荐)
+*更新*
+0.0.1版本网页热切换星球后会报错,请用以下方法更新docker image后重新运行
+```bash
+docker pull azusa0127/salienbot-go
+```
+
 *前台*
 ```bash
 docker run -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
@@ -41,7 +54,7 @@ STEAM_TOKEN=你的TOKEN ./可执行文件名
 
 Windows
 ```bash
-cmd /C "set STEAM_TOKEN=你的TOKEN && 可执行文件名"
+cmd /C "set STEAM_TOKEN=你的TOKEN && .\可执行文件名"
 ```
 
 
