@@ -12,23 +12,38 @@
 - 用以下任一启动方式启动脚本
 
 ## Docker 启动 (推荐)
-### 前台
+*前台*
 ```bash
 docker run -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
 记得替换`你的TOKEN`为之前获取的token值
 
-### 后台运行
+*后台运行*
 ```bash
 docker run -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
 
 可以运行多个实例对应多个token, 重复执行以上命令即可
 
-### 停止并删除docker容器
+*停止并删除docker容器*
 ```bash
 docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go")
 ```
+
+## 可执行文件
+到 https://github.com/azusa0127/salienbot-go/releases 下载对应平台的可执行文件。
+
+替换以下命令中的`你的TOKEN`和`可执行文件名`
+Linux/Mac
+```bash
+STEAM_TOKEN=你的TOKEN 可执行文件名
+```
+
+Windows
+```bash
+cmd /C "set STEAM_TOKEN=你的TOKEN && 可执行文件名"
+```
+
 
 ## 源码执行, 需要go环境
 Linux/Mac
