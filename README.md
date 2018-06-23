@@ -20,7 +20,7 @@ docker run -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 
 ### 后台运行
 ```bash
-docker run -e -d "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
+docker run -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
 
 可以运行多个实例对应多个token, 重复执行以上命令即可
