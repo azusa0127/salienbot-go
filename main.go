@@ -102,6 +102,10 @@ func joinZone(zone *Zone) error {
 }
 
 func submitScore(zone *Zone) (string, error) {
+	// Validate planet change
+	if p, _ := getPlayerInfo(); p.ActiveZoneGame == "" {
+		return "", errors.New("Planet changed, retry in 5")
+	}
 	var score string
 	switch zone.Difficulty {
 	case 1:
@@ -190,7 +194,7 @@ func round() error {
 	}
 	if newScore == "" {
 		nextZone := chooseZone(planet.Zones)
-		log.Printf("Joinng NextZone:%d(%d %.2f%%)...\n",
+		log.Printf("Joining NextZone:%d(%d %.2f%%)...\n",
 			nextZone.Position,
 			nextZone.Difficulty,
 			nextZone.CaptureProgress*100)
@@ -218,6 +222,7 @@ func main() {
 		log.Fatal("[STEAM_TOKEN MISSING] Please set env STEAM_TOKEN first")
 	}
 	log.SetPrefix("SalienBot|" + steamToken[:6] + "|")
+	log.SetFlags(log.Ltime)
 
 	for {
 		waitTime := 1 * time.Second
