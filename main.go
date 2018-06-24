@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,13 +14,18 @@ import (
 
 const contentType = "application/json"
 const gameUrlPrefix = "https://community.steam-api.com/ITerritoryControlMinigameService"
+const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControlMinigameService/GetPlanets/v0001/?active_only=1&language=schinese"
+const existGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
 
 var steamToken = os.Getenv("STEAM_TOKEN")
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 type Planet struct {
+	ID    string
 	State struct {
 		Name     string
 		Active   bool
+		Captured bool
 		Progress float64 `json:"capture_progress"`
 	}
 	Zones []Zone
@@ -111,11 +117,11 @@ func submitScore(zone *Zone) (string, error) {
 	var score string
 	switch zone.Difficulty {
 	case 1:
-		score = "595"
+		score = strconv.Itoa(600 - 5*rng.Intn(2))
 	case 2:
-		score = "1190"
+		score = strconv.Itoa(1200 - 10*rng.Intn(2))
 	case 3:
-		score = "2380"
+		score = strconv.Itoa(2400 - 20*rng.Intn(2))
 	}
 
 	res, err := http.Post(
@@ -164,20 +170,87 @@ func existingGameHandle(player *Player, zones []Zone) (string, error) {
 	return submitScore(target)
 }
 
+func getAvaliablePlanet() (*Planet, error) {
+	res, err := http.Get(activePlanetsEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	buf := struct{ Response struct{ Planets []Planet } }{}
+	err = json.NewDecoder(res.Body).Decode(&buf)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range buf.Response.Planets {
+		if p.State.Active && !p.State.Captured {
+			return &p, nil
+		}
+	}
+
+	return nil, errors.New("No avaliable planet right now")
+}
+
+func joinPlanet(p *Planet) error {
+	log.Println("Joining new planet " + p.State.Name)
+	res, err := http.Post(gameUrlPrefix+"/JoinPlanet/v0001/?id="+p.ID+"&access_token="+steamToken, contentType, bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	}
+	buf := struct{ Response *interface{} }{}
+	err = json.NewDecoder(res.Body).Decode(&buf)
+	if err != nil {
+		return err
+	}
+	if buf.Response == nil {
+		return errors.New("Failed Joining Planet " + p.ID)
+	}
+	return nil
+}
+
+func leavePlanet(planetID string) error {
+	res, err := http.Post(gameUrlPrefix+"/JoinPlanet/v0001/?gameid="+planetID+"&access_token="+steamToken, contentType, bytes.NewBuffer(nil))
+	if err != nil {
+		return err
+	}
+	buf := struct{ Response *interface{} }{}
+	err = json.NewDecoder(res.Body).Decode(&buf)
+	if err != nil {
+		return err
+	}
+	if buf.Response == nil {
+		return errors.New("Failed Leaving Planet " + planetID)
+	}
+	return nil
+}
+
 func round() error {
 	log.Println("=== Starting a new round ===")
 	player, err := getPlayerInfo()
 	if err != nil {
 		return err
 	}
-
-	if player.ActivePlanet == "" {
-		log.Fatal("[FATAL] Must join a planet first.")
+	planetID := player.ActivePlanet
+	if planetID == "" {
+		log.Println("Not in a planet, finding a new one to join...")
+		p, err := getAvaliablePlanet()
+		if err != nil {
+			return err
+		}
+		err = joinPlanet(p)
+		if err != nil {
+			return err
+		}
+		planetID = p.ID
 	}
-
-	planet, err := getPlanetInfo(player.ActivePlanet)
+	planet, err := getPlanetInfo(planetID)
 	if err != nil {
 		return err
+	}
+	if planet.State.Captured || !planet.State.Active {
+		log.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
+		if err = leavePlanet(planetID); err != nil {
+			return err
+		}
+		return errors.New("Leaved planet " + planet.State.Name + ", restarting ...")
 	}
 
 	if !(planet.State.Active && planet.State.Progress < 1.0) {
@@ -205,9 +278,9 @@ func round() error {
 		if err != nil {
 			return err
 		}
-		log.Println("...Seccussfull! Wait for 120s to submit score.")
-
-		time.Sleep(120 * time.Second)
+		waitSeconds := 120 - rng.Intn(11)
+		log.Printf("...Seccussfull! Wait for %ds to submit score.\n", waitSeconds)
+		time.Sleep(time.Duration(waitSeconds) * time.Second)
 
 		newScore, err = submitScore(nextZone)
 		if err != nil {
@@ -227,7 +300,7 @@ func main() {
 	log.SetFlags(log.Ltime)
 
 	for {
-		waitTime := 1 * time.Second
+		waitTime := time.Duration(2+rng.Intn(3)) * time.Second
 		err := round()
 		if err != nil {
 			log.Println("[ERROR]", err.Error())

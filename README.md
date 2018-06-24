@@ -1,17 +1,18 @@
 # Steam 2018 夏促刷分辅助 - golang
 
-[更新 0.0.3 - 修复不稳定网络环境下的崩溃]
+[更新 0.0.4 - 自动更换星球, 优化延时和分数]
 
 - 自动恢复现有游戏
 - 超精简, 单文件, 无依赖
 - 占领进程信息输出
 - [0.0.2] 支持热切换星球, 网页切换星球后脚本将重新寻找适合星球
+- [0.0.4] 星球占领自动更换, 无星球自动加入
+- 随机 110s~120s 延时分数提交, 随机 600/1200/2400 或 595/1190/2380 分数提交
 
 创意的方法来源于 MapleRecall https://steamcn.com/t399390-1-1
 
 # 使用指南
-- 浏览器打开 https://steamcommunity.com/saliengame/play/ 加入一个星球
-- 浏览器打开 https://steamcommunity.com/saliengame/gettoken 获取 token
+- 浏览器打开 https://steamcommunity.com/saliengame/gettoken 登陆并获取 token
 - 用以下任一启动方式启动脚本
 
 # 注意事项
