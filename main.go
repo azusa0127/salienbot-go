@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"log"
 	"math/rand"
 	"net/http"
@@ -17,7 +18,7 @@ const gameUrlPrefix = "https://community.steam-api.com/ITerritoryControlMinigame
 const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControlMinigameService/GetPlanets/v0001/?active_only=1&language=schinese"
 const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
 
-var steamToken = os.Getenv("STEAM_TOKEN")
+var steamToken string
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 type Planet struct {
@@ -48,7 +49,7 @@ func getPlanetInfo(planetID string) (*Planet, error) {
 	}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("[Connection Fail]Invalid response received when getting planet info")
 	}
 	return &buf.Response.Planets[0], nil
 }
@@ -71,7 +72,7 @@ func getPlayerInfo() (*Player, error) {
 	buf := struct{ Response Player }{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("[Connection Fail]Invalid response received when getting player info")
 	}
 
 	return &buf.Response, nil
@@ -99,7 +100,7 @@ func joinZone(zone *Zone) error {
 	}{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return err
+		return errors.New("[Connection Fail]Invalid response received when joining zone")
 	}
 	if buf.Response.ZoneInfo == nil {
 		return errors.New("Failed Joining Zone")
@@ -112,7 +113,7 @@ func submitScore(zone *Zone) (string, error) {
 	if p, err := getPlayerInfo(); err != nil {
 		return "", err
 	} else if p.ActiveZoneGame == "" {
-		return "", errors.New("Planet changed, retry in 5")
+		return "", errors.New("No Active Game found, possible planet changing in progress")
 	}
 	var score string
 	switch zone.Difficulty {
@@ -134,10 +135,10 @@ func submitScore(zone *Zone) (string, error) {
 	}{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return "", err
+		return "", errors.New("[Connection Fail]Invalid response received when submitting score")
 	}
 	if buf.Response.NewScore == "" {
-		return "", errors.New("Failed Submitting the Score")
+		return "", errors.New("Failed to submit the score")
 	}
 	return buf.Response.NewScore, nil
 }
@@ -170,7 +171,7 @@ func existingGameHandle(player *Player, zones []Zone) (string, error) {
 	return submitScore(target)
 }
 
-func getAvaliablePlanet() (*Planet, error) {
+func getBestAvaliablePlanet() (*Planet, error) {
 	res, err := http.Get(activePlanetsEndpoint)
 	if err != nil {
 		return nil, err
@@ -178,15 +179,18 @@ func getAvaliablePlanet() (*Planet, error) {
 	buf := struct{ Response struct{ Planets []Planet } }{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("[Connection Fail]Invalid response received when getting planets")
 	}
+	var retVal *Planet
 	for _, p := range buf.Response.Planets {
-		if p.State.Active && !p.State.Captured {
-			return &p, nil
+		if p.State.Active && !p.State.Captured && (retVal == nil || retVal.State.Progress > p.State.Progress) {
+			retVal = &p
 		}
 	}
-
-	return nil, errors.New("No avaliable planet right now")
+	if retVal == nil {
+		return nil, errors.New("No avaliable planet right now")
+	}
+	return retVal, nil
 }
 
 func joinPlanet(p *Planet) error {
@@ -198,7 +202,7 @@ func joinPlanet(p *Planet) error {
 	buf := struct{ Response *interface{} }{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return err
+		return errors.New("[Connection Fail]Invalid response received when joining planet")
 	}
 	if buf.Response == nil {
 		return errors.New("Failed Joining Planet " + p.ID)
@@ -214,7 +218,7 @@ func leavePlanet(planetID string) error {
 	buf := struct{ Response *interface{} }{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return err
+		return errors.New("[Connection Fail]Invalid response received when leaving planet")
 	}
 	if buf.Response == nil {
 		return errors.New("Failed Leaving Planet " + planetID)
@@ -231,7 +235,7 @@ func round() error {
 	planetID := player.ActivePlanet
 	if planetID == "" {
 		log.Println("Not in a planet, finding a new one to join...")
-		p, err := getAvaliablePlanet()
+		p, err := getBestAvaliablePlanet()
 		if err != nil {
 			return err
 		}
@@ -293,6 +297,7 @@ func round() error {
 }
 
 func main() {
+	flag.StringVar(&steamToken, "token", os.Getenv("STEAM_TOKEN"), "Steam token value from https://steamcommunity.com/saliengame/gettoken")
 	if steamToken == "" {
 		log.Fatal("[STEAM_TOKEN MISSING] Please set env STEAM_TOKEN first")
 	}
@@ -304,8 +309,8 @@ func main() {
 		err := round()
 		if err != nil {
 			log.Println("[ERROR]", err.Error())
-			log.Println("Retry in 5 second.")
-			waitTime = 5 * time.Second
+			log.Println("Retry in 8 second.")
+			waitTime = 8 * time.Second
 		}
 		time.Sleep(waitTime)
 	}
