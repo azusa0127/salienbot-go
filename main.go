@@ -159,8 +159,8 @@ func existingGameHandle(player *Player, zones []Zone) (string, error) {
 			break
 		}
 	}
-	if player.TimeInZone < 120 {
-		waitSeconds := 120 - player.TimeInZone
+	if player.TimeInZone < 115 {
+		waitSeconds := 115 - player.TimeInZone
 		log.Printf("Submitting score for zone %d(%d %.2f%%) in %d seconds...\n",
 			target.Position,
 			target.Difficulty,
