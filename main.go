@@ -190,7 +190,7 @@ func getAvaliablePlanet() (*Planet, error) {
 }
 
 func joinPlanet(p *Planet) error {
-	log.Println("Joining new planet " + p.State.Name)
+	log.Println("Joining planet " + p.State.Name)
 	res, err := http.Post(gameUrlPrefix+"/JoinPlanet/v0001/?id="+p.ID+"&access_token="+steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func leavePlanet(planetID string) error {
 }
 
 func round() error {
-	log.Println("=== Starting a new round ===")
+	log.Println("=== New Start ===")
 	player, err := getPlayerInfo()
 	if err != nil {
 		return err
@@ -250,7 +250,7 @@ func round() error {
 		if err = leavePlanet(planetID); err != nil {
 			return err
 		}
-		return errors.New("Leaved planet " + planet.State.Name + ", restarting ...")
+		return errors.New("Leaved planet " + planet.State.Name + " ...")
 	}
 
 	if !(planet.State.Active && planet.State.Progress < 1.0) {
@@ -269,7 +269,7 @@ func round() error {
 	}
 	if newScore == "" {
 		nextZone := chooseZone(planet.Zones)
-		log.Printf("Joining NextZone:%d(%d %.2f%%)...\n",
+		log.Printf("Joining Zone:%d(%d %.2f%%)...\n",
 			nextZone.Position,
 			nextZone.Difficulty,
 			nextZone.CaptureProgress*100)
@@ -279,7 +279,7 @@ func round() error {
 			return err
 		}
 		waitSeconds := 120 - rng.Intn(11)
-		log.Printf("...Seccussfull! Wait for %ds to submit score.\n", waitSeconds)
+		log.Printf("...Joined! wait %ds to submit.\n", waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
 
 		newScore, err = submitScore(nextZone)
@@ -288,7 +288,7 @@ func round() error {
 		}
 	}
 
-	log.Printf("=== Score Submitted Successfully (%s -> %s) ===\n", player.Score, newScore)
+	log.Printf("=== SUCCUSS (%s -> %s) ===\n", player.Score, newScore)
 	return nil
 }
 
