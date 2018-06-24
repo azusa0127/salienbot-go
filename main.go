@@ -298,6 +298,7 @@ func round() error {
 
 func main() {
 	flag.StringVar(&steamToken, "token", os.Getenv("STEAM_TOKEN"), "Steam token value from https://steamcommunity.com/saliengame/gettoken")
+	flag.Parse()
 	if steamToken == "" {
 		log.Fatal("[STEAM_TOKEN MISSING] Please set env STEAM_TOKEN first")
 	}
