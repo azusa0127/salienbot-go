@@ -15,7 +15,7 @@ import (
 const contentType = "application/json"
 const gameUrlPrefix = "https://community.steam-api.com/ITerritoryControlMinigameService"
 const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControlMinigameService/GetPlanets/v0001/?active_only=1&language=schinese"
-const existGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
+const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
 
 var steamToken = os.Getenv("STEAM_TOKEN")
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -207,7 +207,7 @@ func joinPlanet(p *Planet) error {
 }
 
 func leavePlanet(planetID string) error {
-	res, err := http.Post(gameUrlPrefix+"/JoinPlanet/v0001/?gameid="+planetID+"&access_token="+steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := http.Post(leaveGameEndpoint+"?gameid="+planetID+"&access_token="+steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
