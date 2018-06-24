@@ -1,15 +1,15 @@
 # Steam 2018 夏促刷分辅助 - golang
 
-[更新 0.0.4 - 自动更换星球, 优化延时和分数]
+[更新 0.0.5 - 优化错误输出, 优化星球选择逻辑, 简化可执行文件使用方法]
 
 - 自动恢复现有游戏
 - 超精简, 单文件, 无依赖
 - 占领进程信息输出
-- [0.0.2] 支持热切换星球, 网页切换星球后脚本将重新寻找适合星球
-- [0.0.4] 星球占领自动更换, 无星球自动加入
+- 支持热切换星球, 网页切换星球后脚本将重新寻找适合战区
+- 星球占领自动更换, 无星球自动加入目前占领进度最低的星球
 - 随机 110s~120s 延时分数提交, 随机 600/1200/2400 或 595/1190/2380 分数提交
 
-创意的方法来源于 MapleRecall https://steamcn.com/t399390-1-1
+创意来源于 MapleRecall https://steamcn.com/t399390-1-1
 
 # 使用指南
 - 浏览器打开 https://steamcommunity.com/saliengame/gettoken 登陆并获取 token
@@ -21,7 +21,7 @@
 
 ## Docker 启动 (推荐)
 *更新*
-0.0.1版本网页热切换星球后会报错,请用以下方法更新docker image后重新运行
+0.0.1版本网页热切换星球后会报错,请先停止并删除原容器(参见 *停止并删除docker容器*), 用以下命令更新docker image后重新运行
 ```bash
 docker pull azusa0127/salienbot-go
 ```
@@ -36,7 +36,6 @@ docker run -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```bash
 docker run -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
-
 可以运行多个实例对应多个token, 重复执行以上命令即可
 
 *停止并删除docker容器*
@@ -50,12 +49,12 @@ docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go")
 替换以下命令中的`你的TOKEN`和`可执行文件名`
 Linux/Mac
 ```bash
-STEAM_TOKEN=你的TOKEN ./可执行文件名
+./可执行文件名 -token 你的token
 ```
 
 Windows
 ```bash
-cmd /C "set STEAM_TOKEN=你的TOKEN && .\可执行文件名"
+.\可执行文件名 -token 你的token
 ```
 
 
@@ -79,10 +78,10 @@ docker run -d -e "STEAM_TOKEN=你的TOKEN" -e "HTTP_PROXY=代理服务器地址�
 
 Mac/Linux
 ```bash
-STEAM_TOKEN=你的TOKEN HTTP_PROXY=代理服务器地址和端口 ./可执行文件名
+HTTP_PROXY=代理服务器地址和端口 ./可执行文件名 -token 你的token
 ```
 
 Windows
 ```bash
-cmd /C "set STEAM_TOKEN=你的TOKEN && HTTP_PROXY=代理服务器地址和端口 && .\可执行文件名"
+cmd /C "set HTTP_PROXY=代理服务器地址和端口 && .\可执行文件名 -token 你的token"
 ```
