@@ -25,10 +25,18 @@
 
 docker
 ```bash
-docker run --log-opt max-size=10m -d -e "STEAM_TOKEN=TOKEN1,TOKEN2,TOKEN3" azusa0127/salienbot-go
+docker run --name salienbot --log-opt max-size=10m -d -e "STEAM_TOKEN=TOKEN1,TOKEN2,TOKEN3" azusa0127/salienbot-go
 ```
 替换`TOKEN1,TOKEN2,TOKEN3`为需要设置的token值, 数量没有上限(但是过多可能会影响性能)
 加入docker的`--log-opt max-size=10m`参数以限制日志文件大小为10m
+单实例所以加入`--name salienbot`标记容器名以便获取日志
+
+获取docker特定用户实时日志 (Linux/MacOS),
+```
+docker logs salienbot -f | grep 用户TOKEN前6位
+```
+`-f`选项跟随滚动, ctrl+c退出
+
 
 Windows可执行文件
 ```bash
