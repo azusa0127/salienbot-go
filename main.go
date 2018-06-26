@@ -27,7 +27,7 @@ var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 type AccountHandler struct {
 	steamToken   string
 	logger       *log.Logger
-	roundCounter int
+	roundCounter uint64
 }
 
 type Planet struct {
@@ -73,7 +73,7 @@ type Player struct {
 	NextLevelScore     string `json:"next_level_score"`
 }
 
-func (acc AccountHandler) getPlayerInfo() (*Player, error) {
+func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
 	res, err := http.Post(gameURLPrefix+"/GetPlayerInfo/v0001/?access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func chooseZone(zones []Zone) *Zone {
 	return &z
 }
 
-func (acc AccountHandler) joinZone(zone *Zone) error {
+func (acc *AccountHandler) joinZone(zone *Zone) error {
 	res, err := http.Post(gameURLPrefix+"/JoinZone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
@@ -117,7 +117,7 @@ func (acc AccountHandler) joinZone(zone *Zone) error {
 	return nil
 }
 
-func (acc AccountHandler) submitScore(zone *Zone) (string, error) {
+func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 	// Validate planet change
 	if p, err := acc.getPlayerInfo(); err != nil {
 		return "", err
@@ -152,7 +152,7 @@ func (acc AccountHandler) submitScore(zone *Zone) (string, error) {
 	return buf.Response.NewScore, nil
 }
 
-func (acc AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
+func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
 	if player.ActiveZoneGame == "" {
 		return "", nil
 	}
@@ -168,14 +168,20 @@ func (acc AccountHandler) existingGameHandle(player *Player, zones []Zone) (stri
 			break
 		}
 	}
-	if player.TimeInZone < 115 {
-		waitSeconds := 115 - player.TimeInZone
+	if player.TimeInZone < 112 {
+		waitSeconds := 112 - player.TimeInZone
 		acc.logger.Printf("Submitting score for zone %d(%d %.2f%%) in %d seconds...\n",
 			target.Position,
 			target.Difficulty,
 			target.CaptureProgress*100,
 			waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
+	} else if player.TimeInZone > 150 {
+		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
+		if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+			return "", err
+		}
+		return "", errors.New("Game timed-out")
 	}
 	return acc.submitScore(target)
 }
@@ -202,7 +208,7 @@ func getBestAvaliablePlanet() (*Planet, error) {
 	return retVal, nil
 }
 
-func (acc AccountHandler) joinPlanet(p *Planet) error {
+func (acc *AccountHandler) joinPlanet(p *Planet) error {
 	acc.logger.Println("Joining planet " + p.State.Name)
 	res, err := http.Post(gameURLPrefix+"/JoinPlanet/v0001/?id="+p.ID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
@@ -219,8 +225,8 @@ func (acc AccountHandler) joinPlanet(p *Planet) error {
 	return nil
 }
 
-func (acc AccountHandler) leavePlanet(planetID string) error {
-	res, err := http.Post(leaveGameEndpoint+"?gameid="+planetID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+func (acc *AccountHandler) leaveGame(gameID string) error {
+	res, err := http.Post(leaveGameEndpoint+"?gameid="+gameID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
@@ -230,12 +236,12 @@ func (acc AccountHandler) leavePlanet(planetID string) error {
 		return errors.New("[Connection Fail]Invalid response received when leaving planet")
 	}
 	if buf.Response == nil {
-		return errors.New("Failed Leaving Planet " + planetID)
+		return errors.New("Failed Leaving Game " + gameID)
 	}
 	return nil
 }
 
-func (acc AccountHandler) round() error {
+func (acc *AccountHandler) round() error {
 	acc.roundCounter++
 	acc.logger.Printf("=== Round %d ===\n", acc.roundCounter)
 	player, err := acc.getPlayerInfo()
@@ -261,7 +267,7 @@ func (acc AccountHandler) round() error {
 	}
 	if planet.State.Captured || !planet.State.Active {
 		acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
-		if err = acc.leavePlanet(planetID); err != nil {
+		if err = acc.leaveGame(planetID); err != nil {
 			return err
 		}
 		return errors.New("Leaved planet " + planet.State.Name + " ...")
@@ -292,7 +298,7 @@ func (acc AccountHandler) round() error {
 		if err != nil {
 			return err
 		}
-		waitSeconds := 120 - rng.Intn(11)
+		waitSeconds := 120 - rng.Intn(6)
 		acc.logger.Printf("...Joined! wait %ds to submit.\n", waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
 
@@ -313,7 +319,7 @@ func NewAccountHandler(token string) *AccountHandler {
 	}
 }
 
-func (acc AccountHandler) Start() {
+func (acc *AccountHandler) Start() {
 	go func() {
 		for {
 			waitTime := time.Duration(2+rng.Intn(3)) * time.Second
@@ -334,17 +340,18 @@ func main() {
 	if steamTokens == "" {
 		log.Fatal("[SalienBot][STEAM_TOKEN MISSING] Please set env STEAM_TOKEN or passing in -token argument first")
 	}
-
-	for _, token := range strings.Split(steamTokens, ",") {
-		NewAccountHandler(token).Start()
-	}
-
 	errc := make(chan error)
 	go func() {
-		log.Println("Listening signals...")
+		log.Println("[SalienBot] Listening terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
 	}()
+
+	for _, token := range strings.Split(steamTokens, ",") {
+		NewAccountHandler(token).Start()
+		time.Sleep(3 * time.Second)
+	}
+
 	log.Println("[SalienBot] Terminated - ", <-errc)
 }
