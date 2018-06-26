@@ -21,6 +21,8 @@
 - 仅供学习参考, 作者不对任何使用此工具造成的任何问题负责
 
 ## 0.0.6 多账号单实例示范
+直接将环境变量`STEAM_TOKEN`设置为以英文逗号(`,`)分隔的多个token值即可(注意不能有空格)
+
 docker
 ```bash
 docker run --log-opt max-size=10m -d -e "STEAM_TOKEN=TOKEN1,TOKEN2,TOKEN3" azusa0127/salienbot-go
@@ -35,9 +37,11 @@ Windows可执行文件
 
 ## Docker 启动 (推荐)
 *更新*
-0.0.1版本网页热切换星球后会报错,请先停止并删除原容器(参见 *停止并删除docker容器*), 用以下命令更新docker image后重新运行
+直接在停止并删除现有docker`容器`和`镜像`后重新执行运行指令即可
+
+*停止并删除docker容器和镜像*
 ```bash
-docker pull azusa0127/salienbot-go
+docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go") && docker rmi -f azusa0127/salienbot-go
 ```
 
 *前台*
@@ -48,14 +52,10 @@ docker run -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 
 *后台运行*
 ```bash
-docker run --log-opt max-size=10m -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
+docker run -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
 可以运行多个实例对应多个token, 重复执行以上命令即可
 
-*停止并删除docker容器*
-```bash
-docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go")
-```
 
 ## 可执行文件
 到 https://github.com/azusa0127/salienbot-go/releases 下载对应平台的可执行文件。
@@ -75,12 +75,12 @@ Windows
 ## 源码执行, 需要go环境
 Linux/Mac
 ```bash
-STEAM_TOKEN=你的TOKEN go run main.go
+go run main.go -token 你的TOKEN
 ```
 
 Windows
 ```bash
-cmd /C "set STEAM_TOKEN=你的TOKEN && go run .\main.go"
+go run .\main.go -token 你的TOKEN
 ```
 
 ## 设置HTTPS代理
