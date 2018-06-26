@@ -1,6 +1,6 @@
 # Steam 2018 夏促刷分辅助 - golang
 
-[更新 0.0.5 - 优化错误输出, 优化星球选择逻辑, 简化可执行文件使用方法]
+[更新 0.0.6 - 节约公众云部署成本,支持单实例多账号]
 
 - 自动恢复现有游戏
 - 超精简, 单文件, 无依赖
@@ -8,6 +8,7 @@
 - 支持热切换星球, 网页切换星球后脚本将重新寻找适合战区
 - 星球占领自动更换, 无星球自动加入目前占领进度最低的星球
 - 随机 110s~120s 延时分数提交, 随机 600/1200/2400 或 595/1190/2380 分数提交
+- STEAM_TOKEN环境变量(或者-token参数值) 支持多token, 以英文逗号(`,`)分隔(注意不能有空格)
 
 创意来源于 MapleRecall https://steamcn.com/t399390-1-1
 
@@ -19,11 +20,28 @@
 - 0.0.1 版本热切换星球会报错, 请更新0.0.3版本或者切换星球后重新运行工具
 - 仅供学习参考, 作者不对任何使用此工具造成的任何问题负责
 
+## 0.0.6 多账号单实例示范
+直接将环境变量`STEAM_TOKEN`设置为以英文逗号(`,`)分隔的多个token值即可(注意不能有空格)
+
+docker
+```bash
+docker run --log-opt max-size=10m -d -e "STEAM_TOKEN=TOKEN1,TOKEN2,TOKEN3" azusa0127/salienbot-go
+```
+替换`TOKEN1,TOKEN2,TOKEN3`为需要设置的token值, 数量没有上限(但是过多可能会影响性能)
+加入docker的`--log-opt max-size=10m`参数以限制日志文件大小为10m
+
+Windows可执行文件
+```bash
+.\可执行文件名 -token TOKEN1,TOKEN2,TOKEN3
+```
+
 ## Docker 启动 (推荐)
 *更新*
-0.0.1版本网页热切换星球后会报错,请先停止并删除原容器(参见 *停止并删除docker容器*), 用以下命令更新docker image后重新运行
+直接在停止并删除现有docker`容器`和`镜像`后重新执行运行指令即可
+
+*停止并删除docker容器和镜像*
 ```bash
-docker pull azusa0127/salienbot-go
+docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go") && docker rmi -f azusa0127/salienbot-go
 ```
 
 *前台*
@@ -38,10 +56,6 @@ docker run -d -e "STEAM_TOKEN=你的TOKEN" azusa0127/salienbot-go
 ```
 可以运行多个实例对应多个token, 重复执行以上命令即可
 
-*停止并删除docker容器*
-```bash
-docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go")
-```
 
 ## 可执行文件
 到 https://github.com/azusa0127/salienbot-go/releases 下载对应平台的可执行文件。
@@ -61,12 +75,12 @@ Windows
 ## 源码执行, 需要go环境
 Linux/Mac
 ```bash
-STEAM_TOKEN=你的TOKEN go run main.go
+go run main.go -token 你的TOKEN
 ```
 
 Windows
 ```bash
-cmd /C "set STEAM_TOKEN=你的TOKEN && go run .\main.go"
+go run .\main.go -token 你的TOKEN
 ```
 
 ## 设置HTTPS代理

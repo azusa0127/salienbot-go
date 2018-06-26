@@ -13,4 +13,5 @@ GOOS=windows GOARCH=386 go build -o ./$VER/salienbot-$VER-win32.exe .
 GOOS=linux GOARCH=arm go build -o ./$VER/salienbot-$VER-linux-arm .
 GOOS=linux GOARCH=arm64 go build -o ./$VER/salienbot-$VER-linux-arm64 .
 
-docker build -t azusa0127/salienbot-go . && docker push azusa0127/salienbot-go
+docker build -t azusa0127/salienbot-go:$VER . && docker push azusa0127/salienbot-go:$VER
+docker build -t azusa0127/salienbot-go:latest .
