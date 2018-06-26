@@ -241,6 +241,28 @@ func (acc *AccountHandler) leaveGame(gameID string) error {
 	return nil
 }
 
+func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player) error {
+	retry := 0
+	for retry < 3 {
+		retry++
+		err := acc.joinZone(nextZone)
+		if err == nil {
+			return nil
+		}
+		acc.logger.Println("[RETRY in 5s]", err.Error())
+		time.Sleep(5 * time.Second)
+		player, err = acc.getPlayerInfo()
+		if player.ActiveZoneGame != "" {
+			return errors.New("Already in game while trying joinning a zone ")
+		}
+	}
+	err := acc.leaveGame(player.ActivePlanet)
+	if err != nil {
+		return err
+	}
+	return errors.New("Zone failure reset")
+}
+
 func (acc *AccountHandler) round() error {
 	acc.roundCounter++
 	acc.logger.Printf("=== Round %d ===\n", acc.roundCounter)
@@ -294,7 +316,7 @@ func (acc *AccountHandler) round() error {
 			nextZone.Difficulty,
 			nextZone.CaptureProgress*100)
 
-		err = acc.joinZone(nextZone)
+		err = acc.zoneJoinHandle(nextZone, player)
 		if err != nil {
 			return err
 		}
@@ -308,7 +330,7 @@ func (acc *AccountHandler) round() error {
 		}
 	}
 
-	acc.logger.Printf("===  Round %d Complete (%s -> %s) ===\n", acc.roundCounter, player.Score, newScore)
+	acc.logger.Printf("=== Round %d Complete (%s -> %s) ===\n", acc.roundCounter, player.Score, newScore)
 	return nil
 }
 
