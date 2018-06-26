@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -329,10 +332,19 @@ func main() {
 	flag.StringVar(&steamTokens, "token", os.Getenv("STEAM_TOKEN"), "Steam token value from https://steamcommunity.com/saliengame/gettoken")
 	flag.Parse()
 	if steamTokens == "" {
-		log.Fatal("[STEAM_TOKEN MISSING] Please set env STEAM_TOKEN or passing in -token argument first")
+		log.Fatal("[SalienBot][STEAM_TOKEN MISSING] Please set env STEAM_TOKEN or passing in -token argument first")
 	}
 
 	for _, token := range strings.Split(steamTokens, ",") {
 		NewAccountHandler(token).Start()
 	}
+
+	errc := make(chan error)
+	go func() {
+		log.Println("Listening signals...")
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("Signal %v", <-c)
+	}()
+	log.Println("[SalienBot] Terminated - ", <-errc)
 }
