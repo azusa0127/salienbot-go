@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -20,6 +21,32 @@ const contentType = "application/json"
 const gameURLPrefix = "https://community.steam-api.com/ITerritoryControlMinigameService"
 const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControlMinigameService/GetPlanets/v0001/?active_only=1&language=schinese"
 const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
+
+var planetZoneBlacklist = PlanetZoneBlackList{blacklist: make(map[string]map[int]bool)}
+
+type PlanetZoneBlackList struct {
+	mutex     sync.RWMutex
+	blacklist map[string]map[int]bool
+}
+
+func (p *PlanetZoneBlackList) Add(planet string, zonePosition int) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if zoneMap, found := p.blacklist[planet]; found {
+		zoneMap[zonePosition] = true
+	} else {
+		p.blacklist[planet] = map[int]bool{zonePosition: true}
+	}
+}
+
+func (p *PlanetZoneBlackList) IsBlacklisted(planet string, zonePosition int) bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	if zoneMap, found := p.blacklist[planet]; found {
+		return zoneMap[zonePosition]
+	}
+	return false
+}
 
 type AccountHandler struct {
 	steamToken   string
@@ -84,14 +111,19 @@ func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
 	return &buf.Response, nil
 }
 
-func chooseZone(zones []Zone) *Zone {
-	z := zones[0]
-	for _, zone := range zones {
-		if !zone.Captured && (z.Captured || zone.Difficulty >= z.Difficulty) {
+func chooseZone(p *Planet) (*Zone, error) {
+	var z Zone
+	for _, zone := range p.Zones {
+		if !zone.Captured &&
+			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) &&
+			(z.GameID == "" || zone.Difficulty >= z.Difficulty) {
 			z = zone
 		}
 	}
-	return &z
+	if z.GameID == "" {
+		return nil, errors.New("No available zone in the planet")
+	}
+	return &z, nil
 }
 
 func (acc *AccountHandler) joinZone(zone *Zone) error {
@@ -238,7 +270,7 @@ func (acc *AccountHandler) leaveGame(gameID string) error {
 	return nil
 }
 
-func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player) error {
+func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player, planet *Planet) error {
 	retry := 0
 	for retry < 3 {
 		retry++
@@ -250,14 +282,11 @@ func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player) error 
 		time.Sleep(5 * time.Second)
 		player, err = acc.getPlayerInfo()
 		if player.ActiveZoneGame != "" {
-			return errors.New("Already in game while trying joinning a zone ")
+			return errors.New("Already in a game while trying to join a zone ")
 		}
 	}
-	err := acc.leaveGame(player.ActivePlanet)
-	if err != nil {
-		return err
-	}
-	return errors.New("Zone failure reset")
+	planetZoneBlacklist.Add(planet.ID, nextZone.Position)
+	return errors.New("Zone (" + planet.State.Name + "-" + strconv.Itoa(nextZone.Position) + ") is potentially full, and now be blacklisted.")
 }
 
 func (acc *AccountHandler) round() error {
@@ -307,13 +336,20 @@ func (acc *AccountHandler) round() error {
 		return err
 	}
 	if newScore == "" {
-		nextZone := chooseZone(planet.Zones)
+		nextZone, err := chooseZone(planet)
+		if err != nil {
+			acc.logger.Println(err.Error(), ", leaving plannet")
+			if err = acc.leaveGame(player.ActivePlanet); err != nil {
+				return err
+			}
+			return errors.New("Planet reset")
+		}
 		acc.logger.Printf("Joining Zone:%d(%d %.2f%%)...\n",
 			nextZone.Position,
 			nextZone.Difficulty,
 			nextZone.CaptureProgress*100)
 
-		err = acc.zoneJoinHandle(nextZone, player)
+		err = acc.zoneJoinHandle(nextZone, player, planet)
 		if err != nil {
 			return err
 		}
@@ -361,7 +397,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] Listening terminate signal ctrl-c...")
+		log.Println("[SalienBot] Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
