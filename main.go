@@ -76,7 +76,7 @@ func (b *BestAvailablePlanet) Init() error {
 	}
 
 	go func() {
-		for _ = range time.NewTicker(10 * time.Minute).C {
+		for _ = range time.NewTicker(5 * time.Minute).C {
 			for {
 				err := b.Update()
 				if err == nil {
@@ -113,9 +113,17 @@ func (b *BestAvailablePlanet) Update() error {
 	if bestDifficulty == 0 {
 		return errors.New("No avaliable planet right now")
 	}
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-	b.bestPlanet = choosen
+	if cbd := getBestAvailableDifficulty(&b.bestPlanet); b.bestPlanet.ID != choosen.ID && cbd < bestDifficulty {
+		b.mutex.Lock()
+		b.bestPlanet = choosen
+		b.mutex.Unlock()
+		log.Printf("[SalienBot] Best Available Planet Changed: %s (%d) -> %s (%d, %.2f%%) \n",
+			b.bestPlanet.State.Name,
+			cbd,
+			choosen.State.Name,
+			bestDifficulty,
+			choosen.State.Progress*100)
+	}
 	return nil
 }
 
