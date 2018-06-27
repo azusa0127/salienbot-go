@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,8 +20,6 @@ const contentType = "application/json"
 const gameURLPrefix = "https://community.steam-api.com/ITerritoryControlMinigameService"
 const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControlMinigameService/GetPlanets/v0001/?active_only=1&language=schinese"
 const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
-
-var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 type AccountHandler struct {
 	steamToken   string
@@ -127,11 +124,11 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 	var score string
 	switch zone.Difficulty {
 	case 1:
-		score = strconv.Itoa(600 - 5*rng.Intn(2))
+		score = "600"
 	case 2:
-		score = strconv.Itoa(1200 - 10*rng.Intn(2))
+		score = "1200"
 	case 3:
-		score = strconv.Itoa(2400 - 20*rng.Intn(2))
+		score = "2400"
 	}
 
 	res, err := http.Post(
@@ -168,8 +165,8 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 			break
 		}
 	}
-	if player.TimeInZone < 112 {
-		waitSeconds := 112 - player.TimeInZone
+	if player.TimeInZone < 110 {
+		waitSeconds := 110 - player.TimeInZone
 		acc.logger.Printf("Submitting score for zone %d(%d %.2f%%) in %d seconds...\n",
 			target.Position,
 			target.Difficulty,
@@ -320,7 +317,7 @@ func (acc *AccountHandler) round() error {
 		if err != nil {
 			return err
 		}
-		waitSeconds := 120 - rng.Intn(6)
+		waitSeconds := 110
 		acc.logger.Printf("...Joined! wait %ds to submit.\n", waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
 
@@ -344,7 +341,7 @@ func NewAccountHandler(token string) *AccountHandler {
 func (acc *AccountHandler) Start() {
 	go func() {
 		for {
-			waitTime := time.Duration(2+rng.Intn(3)) * time.Second
+			waitTime := 2 * time.Second
 			err := acc.round()
 			if err != nil {
 				acc.logger.Println("[ERROR]", err.Error(), "Retry in 8 second...")
