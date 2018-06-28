@@ -316,15 +316,13 @@ func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player, planet
 }
 
 func (acc *AccountHandler) updateBestPlanet() {
-	if time.Since(acc.lastBestPlanetUpdate) < 5*time.Second {
+	if time.Since(acc.lastBestPlanetUpdate) < 30*time.Second {
 		return
 	}
-	err := errors.New("updateBestPlanetError")
-	var bestPlanet *Planet
-	for err != nil {
-		bestPlanet, err = getBestAvailablePlanet()
-		acc.logger.Println("updat best planet error", err.Error(), "retry in 1s")
-		time.Sleep(1 * time.Second)
+	bestPlanet, err := getBestAvailablePlanet()
+	if err != nil {
+		acc.logger.Println("bestPlanet update failed" + err.Error() + ", will retry in the next round")
+		return
 	}
 	acc.lastBestPlanetUpdate = time.Now()
 
@@ -427,7 +425,7 @@ func NewAccountHandler(token string) *AccountHandler {
 	var bestPlanet *Planet
 	for err != nil {
 		bestPlanet, err = getBestAvailablePlanet()
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 
 	return &AccountHandler{
