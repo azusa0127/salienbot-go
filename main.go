@@ -368,6 +368,12 @@ func (acc *AccountHandler) round() error {
 		} else {
 			acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
 		}
+		if player.ActiveZoneGame != "" {
+			if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+				return err
+			}
+		}
+
 		if err = acc.leaveGame(planetID); err != nil {
 			return err
 		}
