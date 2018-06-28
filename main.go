@@ -466,7 +466,6 @@ func main() {
 				err = updateBestAvailablePlanet()
 				time.Sleep(1 * time.Second)
 			}
-			log.Printf("DEBUG Best Planet %v\n", bestAvailablePlanet)
 		}
 	}()
 
