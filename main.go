@@ -304,12 +304,6 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 			target.CaptureProgress*100,
 			waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
-	} else if player.TimeInZone > 150 {
-		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
-		if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
-			return "", err
-		}
-		return "", errors.New("Game timed-out")
 	}
 	return acc.submitScore(target)
 }
@@ -373,6 +367,15 @@ func (acc *AccountHandler) round() error {
 	if err != nil {
 		return err
 	}
+
+	if player.TimeInZone > 140 {
+		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
+		if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+			return err
+		}
+		return errors.New("Game timed-out")
+	}
+
 	planetID := player.ActivePlanet
 	bestPlanet, err := bestAvailablePlanet.Get()
 	if err != nil {
@@ -393,6 +396,9 @@ func (acc *AccountHandler) round() error {
 	if planet.State.Captured || !planet.State.Active || bestPlanet.ID != planetID {
 		if bestPlanet.ID != planetID {
 			acc.logger.Println("A better planet " + bestPlanet.State.Name + " is available, leaving " + planet.State.Name + "...")
+			if player.ActiveZoneGame != "" {
+				acc.leaveGame(player.ActiveZoneGame)
+			}
 		} else {
 			acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
 		}
@@ -478,7 +484,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.2.0 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -493,5 +499,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.2.0 Terminated - ", <-errc)
 }
