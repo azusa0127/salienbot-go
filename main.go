@@ -281,7 +281,7 @@ func (acc *AccountHandler) joinPlanet(p *Planet) error {
 }
 
 func (acc *AccountHandler) leaveGame(gameID string) error {
-	res, err := http.Post(leaveGameEndpoint+"?gameid="+gameID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := http.Post(leaveGameEndpoint+"?access_token="+acc.steamToken+"&gameid="+gameID, contentType, bytes.NewBuffer([]byte("")))
 	if err != nil {
 		return err
 	}
@@ -323,6 +323,8 @@ func (acc *AccountHandler) updateBestPlanet() {
 	var bestPlanet *Planet
 	for err != nil {
 		bestPlanet, err = getBestAvailablePlanet()
+		acc.logger.Println("updat best planet error", err.Error(), "retry in 1s")
+		time.Sleep(1 * time.Second)
 	}
 	acc.lastBestPlanetUpdate = time.Now()
 
@@ -425,6 +427,7 @@ func NewAccountHandler(token string) *AccountHandler {
 	var bestPlanet *Planet
 	for err != nil {
 		bestPlanet, err = getBestAvailablePlanet()
+		time.Sleep(1 * time.Second)
 	}
 
 	return &AccountHandler{
