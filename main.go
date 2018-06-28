@@ -316,7 +316,7 @@ func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player, planet
 }
 
 func (acc *AccountHandler) updateBestPlanet() {
-	if time.Since(acc.lastBestPlanetUpdate) < 30*time.Second {
+	if time.Since(acc.lastBestPlanetUpdate) < 5*time.Minute {
 		return
 	}
 	bestPlanet, err := getBestAvailablePlanet()
