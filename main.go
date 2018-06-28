@@ -23,7 +23,7 @@ const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControl
 const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
 
 var planetZoneBlacklist = PlanetZoneBlackList{blacklist: make(map[string]map[int]bool)}
-var bestAvailablePlanet = BestAvailablePlanet{}
+var bestAvailablePlanet *Planet
 
 type PlanetZoneBlackList struct {
 	mutex     sync.RWMutex
@@ -49,56 +49,40 @@ func (p *PlanetZoneBlackList) IsBlacklisted(planet string, zonePosition int) boo
 	return false
 }
 
-type BestAvailablePlanet struct {
-	mutex      sync.RWMutex
-	bestPlanet Planet
-}
-
-func (b *BestAvailablePlanet) Get() (*Planet, error) {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
-	return &b.bestPlanet, nil
-}
-
-func (b *BestAvailablePlanet) Init() error {
-	retry := 3
-	log.Println("[SalienBot] Initializing BestAvailablePlanet Tracker")
-	for ; retry > 0; retry-- {
-		err := b.Update()
-		if err == nil {
-			break
-		}
-		log.Println("[SalienBot] Failed updating BestAvailablePlanet Tracker ", err.Error(), "retry in 2s...")
-		time.Sleep(2 * time.Second)
+func updateBestAvailablePlanet() error {
+	bestPlanet, err := getBestAvailablePlanet()
+	if err != nil {
+		return err
 	}
-	if retry == 0 {
-		return errors.New("BestAvailablePlanet Tracker Initialzation Falied after 3 retries")
+	if bestAvailablePlanet == nil {
+		bestAvailablePlanet = bestPlanet
+		return nil
 	}
 
-	go func() {
-		for _ = range time.NewTicker(5 * time.Minute).C {
-			for {
-				err := b.Update()
-				if err == nil {
-					break
-				}
-				log.Println("[SalienBot] Failed updating BestAvailablePlanet Tracker ", err.Error(), "retry in 2s...")
-				time.Sleep(2 * time.Second)
-			}
-		}
-	}()
+	currentDifficulty := getBestAvailableDifficulty(bestAvailablePlanet)
+	bestDifficulty := getBestAvailableDifficulty(bestPlanet)
+
+	if currentDifficulty < bestDifficulty {
+		log.Printf("[SalienBot] Best Available Planet Changed: %s (%d) -> %s (%d, %.2f%%) \n",
+			bestAvailablePlanet.State.Name,
+			currentDifficulty,
+			bestPlanet.State.Name,
+			bestDifficulty,
+			bestPlanet.State.Progress*100)
+		bestAvailablePlanet = bestPlanet
+	}
 	return nil
 }
 
-func (b *BestAvailablePlanet) Update() error {
+func getBestAvailablePlanet() (*Planet, error) {
 	res, err := http.Get(activePlanetsEndpoint)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	buf := struct{ Response struct{ Planets []Planet } }{}
 	err = json.NewDecoder(res.Body).Decode(&buf)
 	if err != nil {
-		return errors.New("[Connection Fail]Invalid response received when getting planets")
+		return nil, errors.New("[Connection Fail]Invalid response received when getting planets")
 	}
 	var bestDifficulty int
 	var choosen Planet
@@ -111,20 +95,9 @@ func (b *BestAvailablePlanet) Update() error {
 		}
 	}
 	if bestDifficulty == 0 {
-		return errors.New("No avaliable planet right now")
+		return nil, errors.New("No avaliable planet right now")
 	}
-	if cbd := getBestAvailableDifficulty(&b.bestPlanet); b.bestPlanet.ID != choosen.ID && cbd < bestDifficulty {
-		b.mutex.Lock()
-		b.bestPlanet = choosen
-		b.mutex.Unlock()
-		log.Printf("[SalienBot] Best Available Planet Changed: %s (%d) -> %s (%d, %.2f%%) \n",
-			b.bestPlanet.State.Name,
-			cbd,
-			choosen.State.Name,
-			bestDifficulty,
-			choosen.State.Progress*100)
-	}
-	return nil
+	return &choosen, nil
 }
 
 func getBestAvailableDifficulty(p *Planet) int {
@@ -374,25 +347,24 @@ func (acc *AccountHandler) round() error {
 		return err
 	}
 	planetID := player.ActivePlanet
-	bestPlanet, err := bestAvailablePlanet.Get()
 	if err != nil {
 		return err
 	}
 	if planetID == "" {
-		acc.logger.Println("Not in a planet, Joining planet " + bestPlanet.State.Name + "...")
-		err = acc.joinPlanet(bestPlanet)
+		acc.logger.Println("Not in a planet, Joining planet " + bestAvailablePlanet.State.Name + "...")
+		err = acc.joinPlanet(bestAvailablePlanet)
 		if err != nil {
 			return err
 		}
-		planetID = bestPlanet.ID
+		planetID = bestAvailablePlanet.ID
 	}
 	planet, err := getPlanetInfo(planetID)
 	if err != nil {
 		return err
 	}
-	if planet.State.Captured || !planet.State.Active || bestPlanet.ID != planetID {
-		if bestPlanet.ID != planetID {
-			acc.logger.Println("A better planet " + bestPlanet.State.Name + " is available, leaving " + planet.State.Name + "...")
+	if planet.State.Captured || !planet.State.Active || bestAvailablePlanet.ID != planetID {
+		if bestAvailablePlanet.ID != planetID {
+			acc.logger.Println("A better planet " + bestAvailablePlanet.State.Name + " is available, leaving " + planet.State.Name + "...")
 		} else {
 			acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
 		}
@@ -484,9 +456,19 @@ func main() {
 		errc <- fmt.Errorf("Signal %v", <-c)
 	}()
 
-	if err := bestAvailablePlanet.Init(); err != nil {
+	if err := updateBestAvailablePlanet(); err != nil {
 		log.Fatal(err)
 	}
+	go func() {
+		for _ = range time.NewTicker(5 * time.Minute).C {
+			err := updateBestAvailablePlanet()
+			for err != nil {
+				err = updateBestAvailablePlanet()
+				time.Sleep(1 * time.Second)
+			}
+			log.Printf("DEBUG Best Planet %v\n", bestAvailablePlanet)
+		}
+	}()
 
 	for _, token := range strings.Split(steamTokens, ",") {
 		NewAccountHandler(token).Start()
