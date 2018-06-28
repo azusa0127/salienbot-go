@@ -255,7 +255,7 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
 	} else if player.TimeInZone > 150 {
 		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
-		if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+		if err := acc.leaveGame(player.ActiveZoneGame); err != nil {
 			return "", err
 		}
 		return "", errors.New("Game timed-out")
@@ -352,7 +352,7 @@ func (acc *AccountHandler) round() error {
 	planetID := player.ActivePlanet
 	if planetID == "" {
 		acc.logger.Println("Not in a planet, Joining planet " + acc.bestPlanet.State.Name + "...")
-		err = acc.joinPlanet(acc.bestPlanet)
+		err := acc.joinPlanet(acc.bestPlanet)
 		if err != nil {
 			return err
 		}
@@ -369,12 +369,12 @@ func (acc *AccountHandler) round() error {
 			acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
 		}
 		if player.ActiveZoneGame != "" {
-			if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+			if err := acc.leaveGame(player.ActiveZoneGame); err != nil {
 				return err
 			}
 		}
 
-		if err = acc.leaveGame(planetID); err != nil {
+		if err := acc.leaveGame(planetID); err != nil {
 			return err
 		}
 		return errors.New("Leaved planet " + planet.State.Name + " ...")
@@ -398,7 +398,7 @@ func (acc *AccountHandler) round() error {
 		nextZone, err := chooseZone(planet)
 		if err != nil {
 			acc.logger.Println(err.Error(), ", leaving plannet")
-			if err = acc.leaveGame(player.ActivePlanet); err != nil {
+			if err := acc.leaveGame(player.ActivePlanet); err != nil {
 				return err
 			}
 			return errors.New("Planet reset")
@@ -476,5 +476,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.1.3 -  Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.1.4 -  Terminated - ", <-errc)
 }
