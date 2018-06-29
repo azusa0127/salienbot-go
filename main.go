@@ -106,7 +106,9 @@ func (b *BestAvailablePlanet) Update() error {
 		if pd := getBestAvailableDifficulty(&p); pd > bestDifficulty {
 			choosen = p
 			bestDifficulty = pd
-		} else if bestDifficulty > 0 && pd == bestDifficulty && p.State.Progress < choosen.State.Progress {
+		} else if bestDifficulty > 1 && pd == bestDifficulty && p.State.Progress < choosen.State.Progress {
+			choosen = p
+		} else if bestDifficulty == 1 && pd == bestDifficulty && p.State.Progress > choosen.State.Progress {
 			choosen = p
 		}
 	}
@@ -341,18 +343,18 @@ func (acc *AccountHandler) leaveGame(gameID string) error {
 	return nil
 }
 
-func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player, planet *Planet) error {
+func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, planet *Planet) error {
 	retry := 0
 	for retry < 3 {
 		retry++
-		err := acc.joinZone(nextZone)
-		if err == nil {
+		if err := acc.joinZone(nextZone); err == nil {
 			return nil
 		}
-		acc.logger.Println("[RETRY in 5s]", err.Error())
+		acc.logger.Println("Zone Join Failed [RETRY in 5s]")
 		time.Sleep(5 * time.Second)
-		player, err = acc.getPlayerInfo()
-		if player.ActiveZoneGame != "" {
+		if p, err := acc.getPlayerInfo(); err != nil {
+			return err
+		} else if p.ActiveZoneGame != "" {
 			return errors.New("Already in a game while trying to join a zone ")
 		}
 	}
@@ -363,34 +365,34 @@ func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, player *Player, planet
 func (acc *AccountHandler) round() error {
 	acc.roundCounter++
 	acc.logger.Printf("=== Round %d ===\n", acc.roundCounter)
-	player, err := acc.getPlayerInfo()
-	if err != nil {
+	var player *Player
+	var err error
+	if player, err = acc.getPlayerInfo(); err != nil {
 		return err
 	}
 
 	if player.TimeInZone > 140 {
 		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
-		if err = acc.leaveGame(player.ActiveZoneGame); err != nil {
+		if err := acc.leaveGame(player.ActiveZoneGame); err != nil {
 			return err
 		}
 		return errors.New("Game timed-out")
 	}
 
 	planetID := player.ActivePlanet
-	bestPlanet, err := bestAvailablePlanet.Get()
-	if err != nil {
+	var bestPlanet *Planet
+	if bestPlanet, err = bestAvailablePlanet.Get(); err != nil {
 		return err
 	}
 	if planetID == "" {
 		acc.logger.Println("Not in a planet, Joining planet " + bestPlanet.State.Name + "...")
-		err = acc.joinPlanet(bestPlanet)
-		if err != nil {
+		if err = acc.joinPlanet(bestPlanet); err != nil {
 			return err
 		}
 		planetID = bestPlanet.ID
 	}
-	planet, err := getPlanetInfo(planetID)
-	if err != nil {
+	var planet *Planet
+	if planet, err = getPlanetInfo(planetID); err != nil {
 		return err
 	}
 	if planet.State.Captured || !planet.State.Active || bestPlanet.ID != planetID {
@@ -418,13 +420,13 @@ func (acc *AccountHandler) round() error {
 		player.Level,
 		player.Score,
 		player.NextLevelScore)
-	newScore, err := acc.existingGameHandle(player, planet.Zones)
-	if err != nil {
+	var newScore string
+	if newScore, err = acc.existingGameHandle(player, planet.Zones); err != nil {
 		return err
 	}
 	if newScore == "" {
-		nextZone, err := chooseZone(planet)
-		if err != nil {
+		var nextZone *Zone
+		if nextZone, err = chooseZone(planet); err != nil {
 			acc.logger.Println(err.Error(), ", leaving plannet")
 			if err = acc.leaveGame(player.ActivePlanet); err != nil {
 				return err
@@ -436,16 +438,14 @@ func (acc *AccountHandler) round() error {
 			nextZone.Difficulty,
 			nextZone.CaptureProgress*100)
 
-		err = acc.zoneJoinHandle(nextZone, player, planet)
-		if err != nil {
+		if err = acc.zoneJoinHandle(nextZone, planet); err != nil {
 			return err
 		}
 		waitSeconds := 110
 		acc.logger.Printf("...Joined! wait %ds to submit.\n", waitSeconds)
 		time.Sleep(time.Duration(waitSeconds) * time.Second)
 
-		newScore, err = acc.submitScore(nextZone)
-		if err != nil {
+		if newScore, err = acc.submitScore(nextZone); err != nil {
 			return err
 		}
 	}
