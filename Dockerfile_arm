@@ -1,15 +1,6 @@
-
-#build stage
-FROM golang:1.9 AS builder
-WORKDIR /go/src/app
-COPY . .
-ENV GOOS=linux
-ENV GOARCH=arm
-RUN go build -o ./$VER/salienbot-$VER-linux-arm . go build -o salienbot .
-
-#final stage
 FROM alpine:latest
+ARG ver
 LABEL Name=salienbot-go Platform=arm
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /go/src/app/salienbot /app/salienbot
+COPY $ver/salienbot-$ver-linux-arm /app/salienbot
 ENTRYPOINT ["/app/salienbot"]
