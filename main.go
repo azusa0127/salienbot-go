@@ -22,7 +22,7 @@ import (
 var httpClient = http.Client{
 	Transport: &http.Transport{
 		Dial: (&net.Dialer{
-			Timeout: 5 * time.Second,
+			Timeout: 10 * time.Second,
 		}).Dial,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
@@ -482,8 +482,12 @@ func main() {
 		errc <- fmt.Errorf("Signal %v", <-c)
 	}()
 
-	if _, _, err := bestAvailablePlanet.Get(); err != nil {
-		log.Fatal(err)
+	for retry := 5; retry >= 0; retry-- {
+		if _, _, err := bestAvailablePlanet.Get(); err == nil {
+			break
+		}
+		log.Println("Failed getting planets info, retrying...")
+		time.Sleep(1 * time.Second)
 	}
 
 	for _, token := range strings.Split(steamTokens, ",") {
