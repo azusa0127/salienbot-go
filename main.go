@@ -24,7 +24,7 @@ const activePlanetsEndpoint = "https://community.steam-api.com/ITerritoryControl
 const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/LeaveGame/v0001/"
 
 var planetZoneBlacklist = PlanetZoneBlackList{blacklist: make(map[string]map[int]bool)}
-var bestAvailablePlanet = BestAvailablePlanet{}
+var bestAvailablePlanet = BestAvailablePlanet{ttl: 5 * time.Minute}
 
 type PlanetZoneBlackList struct {
 	mutex     sync.RWMutex
