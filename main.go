@@ -252,7 +252,9 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 
 	res, err := httpClient.Post(
 		gameURLPrefix+"/ReportScore/v0001/?score="+score+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
-
+	if err != nil {
+		return "", err
+	}
 	buf := struct {
 		Response struct {
 			NewScore string `json:"new_score"`
