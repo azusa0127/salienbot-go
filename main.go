@@ -482,11 +482,14 @@ func main() {
 		errc <- fmt.Errorf("Signal %v", <-c)
 	}()
 
-	for retry := 5; retry >= 0; retry-- {
+	for retry := 3; retry >= 0; retry-- {
 		if _, _, err := bestAvailablePlanet.Get(); err == nil {
 			break
+		} else if retry == 0 {
+			log.Fatal("[FATAL ERROR] Cannot get planets info:", err.Error())
+		} else {
+			log.Println("Failed getting planets info - ", err.Error(), " - retrying...")
 		}
-		log.Println("Failed getting planets info, retrying...")
 		time.Sleep(1 * time.Second)
 	}
 
