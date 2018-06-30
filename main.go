@@ -116,7 +116,7 @@ func getBestAvailableDifficulty(p Planet) uint {
 
 	var bestDifficulty int
 	for _, z := range planet.Zones {
-		if !planetZoneBlacklist.IsBlacklisted(planet.ID, z.Position) && z.Difficulty > bestDifficulty {
+		if !planetZoneBlacklist.IsBlacklisted(planet.ID, z.Position) && !z.Captured && z.Difficulty > bestDifficulty {
 			bestDifficulty = z.Difficulty
 		}
 	}
