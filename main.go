@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,17 @@ import (
 	"syscall"
 	"time"
 )
+
+var httpClient = http.Client{
+	Transport: &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
+	},
+}
 
 const contentType = "application/x-www-form-urlencoded; charset=UTF-8"
 const gameURLPrefix = "https://community.steam-api.com/ITerritoryControlMinigameService"
@@ -74,7 +86,7 @@ func (b *BestAvailablePlanet) Get() (string, uint, error) {
 }
 
 func getBestAvailablePlanet() (string, uint, error) {
-	res, err := http.Get(activePlanetsEndpoint)
+	res, err := httpClient.Get(activePlanetsEndpoint)
 	if err != nil {
 		return "", 0, err
 	}
@@ -151,7 +163,7 @@ type Zone struct {
 func getPlanetInfo(planetID string) (*Planet, error) {
 	buf := struct{ Response struct{ Planets []Planet } }{}
 
-	res, err := http.Get(gameURLPrefix + "/GetPlanet/v0001/?id=" + planetID + "&language=schinese")
+	res, err := httpClient.Get(gameURLPrefix + "/GetPlanet/v0001/?id=" + planetID + "&language=schinese")
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +185,7 @@ type Player struct {
 }
 
 func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
-	res, err := http.Post(gameURLPrefix+"/GetPlayerInfo/v0001/?access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(gameURLPrefix+"/GetPlayerInfo/v0001/?access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +214,7 @@ func chooseZone(p *Planet) (*Zone, error) {
 }
 
 func (acc *AccountHandler) joinZone(zone *Zone) error {
-	res, err := http.Post(gameURLPrefix+"/JoinZone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(gameURLPrefix+"/JoinZone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
@@ -238,7 +250,7 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 		score = "2400"
 	}
 
-	res, err := http.Post(
+	res, err := httpClient.Post(
 		gameURLPrefix+"/ReportScore/v0001/?score="+score+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 
 	buf := struct {
@@ -287,7 +299,7 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 
 func (acc *AccountHandler) joinPlanet(p *Planet) error {
 	acc.logger.Println("Joining planet " + p.State.Name)
-	res, err := http.Post(gameURLPrefix+"/JoinPlanet/v0001/?id="+p.ID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(gameURLPrefix+"/JoinPlanet/v0001/?id="+p.ID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
@@ -303,7 +315,7 @@ func (acc *AccountHandler) joinPlanet(p *Planet) error {
 }
 
 func (acc *AccountHandler) leaveGame(gameID string) error {
-	res, err := http.Post(leaveGameEndpoint+"?access_token="+acc.steamToken+"&gameid="+gameID, contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(leaveGameEndpoint+"?access_token="+acc.steamToken+"&gameid="+gameID, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}

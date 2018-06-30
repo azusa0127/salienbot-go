@@ -7,7 +7,7 @@ RUN go build -o salienbot .
 
 #final stage
 FROM alpine:latest
-LABEL Name=salienbot-go Version=0.0.1
+LABEL Name=salienbot-go
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /go/src/app/salienbot /app/salienbot
 ENTRYPOINT ["/app/salienbot"]
