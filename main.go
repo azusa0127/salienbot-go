@@ -303,7 +303,7 @@ func (acc *AccountHandler) joinPlanet(p *Planet) error {
 }
 
 func (acc *AccountHandler) leaveGame(gameID string) error {
-	res, err := http.Post(leaveGameEndpoint+"?gameid="+gameID+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	res, err := http.Post(leaveGameEndpoint+"?access_token="+acc.steamToken+"&gameid="+gameID, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
@@ -376,7 +376,7 @@ func (acc *AccountHandler) round() error {
 	}
 
 	if planet.State.Captured || !planet.State.Active {
-		acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving...")
+		acc.logger.Println("Planet " + planet.State.Name + " is inactive or already captured, leaving planet " + planet.ID + "...")
 		if err := acc.leaveGame(planet.ID); err != nil {
 			return err
 		}
@@ -387,6 +387,9 @@ func (acc *AccountHandler) round() error {
 		acc.logger.Printf("A better planet with difficulty %d is available, leaving %s ...\n", bestDifficulty, planet.State.Name)
 		if player.ActiveZoneGame != "" {
 			acc.leaveGame(player.ActiveZoneGame)
+		}
+		if err := acc.leaveGame(planet.ID); err != nil {
+			return err
 		}
 		return errors.New("Leaved planet " + planet.State.Name + " for a better planet...")
 	}
