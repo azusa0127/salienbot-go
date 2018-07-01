@@ -541,10 +541,11 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 		}
 		b.logger.Println("Successful.")
 	}
+	b.logger.Println("Attempt to report damages ...")
 
 	for gameover, err := b.reportBossDamage(false); !gameover; gameover, err = b.reportBossDamage(err == nil) {
 		if err != nil {
-			b.logger.Println("[Error] While Reporting Boss Damage -", err.Error(), "- retry in 5s")
+			b.logger.Println("[Warn]", err.Error(), "- retry in 5s")
 		}
 		time.Sleep(5 * time.Second)
 	}
@@ -554,7 +555,7 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 		return err
 	}
 	if player.ActiveBossGame != "" {
-		b.logger.Println("Boss Fight Completed, exiting ...")
+		b.logger.Println("Boss Fight Completed, quiting ...")
 		if err = b.leaveGame(player.ActiveBossGame); err != nil {
 			return err
 		}
@@ -572,8 +573,8 @@ func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, error) {
 		return false, err
 	}
 	buf := struct {
-		Response struct {
-			BossStatus *struct {
+		Response *struct {
+			BossStatus struct {
 				BossHP    int `json:"boss_hp"`
 				BossMaxHP int `json:"boss_map_hp"`
 			} `json:"boss_status"`
@@ -585,17 +586,17 @@ func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, error) {
 		return false, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
 	}
 
+	if buf.Response == nil {
+		return false, errors.New("Failed Reporting Damage")
+	}
+
 	if buf.Response.GameOver {
 		b.logger.Println("Boss is now dead.")
 		return true, nil
 	}
 
-	if buf.Response.BossStatus == nil {
-		if buf.Response.WaitingForPlayers {
-			b.logger.Println("Waiting for boss fight players ...")
-			return false, nil
-		}
-		return false, errors.New("Failed Reporting Damage")
+	if buf.Response.WaitingForPlayers {
+		return false, errors.New("Waiting for boss fight players")
 	}
 
 	b.logger.Printf("Boss fight in progress - HP %d/%d\n", buf.Response.BossStatus.BossHP, buf.Response.BossStatus.BossMaxHP)
