@@ -314,7 +314,6 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 		if err := acc.handleBossFight(target); err != nil {
 			return "", err
 		}
-		return "", errors.New("Boss fight complete, reseting")
 	}
 
 	if player.TimeInZone < 110 {
@@ -523,84 +522,104 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 		return errors.New("Not an Active Boss Zone")
 	}
 
+	var retry uint
+	for retry = 0; retry < 10; retry++ {
+		player, err := b.getPlayerInfo()
+		if err != nil {
+			return err
+		}
+		if player.ActiveBossGame == "" {
+			if player.ActiveZoneGame != "" {
+				b.logger.Println("Quiting current game for a boss zone fight...")
+				if err = b.leaveGame(player.ActiveZoneGame); err != nil {
+					return err
+				}
+			}
+
+			b.logger.Printf("Joining zone %d for a boss fight...\n", zone.Position)
+			if err = b.joinZone(zone); err != nil {
+				return err
+			}
+			b.logger.Println("Successful.")
+		}
+		b.logger.Println("Attempt to report damages ...")
+
+		bossResp, err := b.reportBossDamage(nil)
+		for err == nil {
+			if bossResp != nil {
+				if bossResp.GameOver {
+					b.logger.Println("Boss fight is over ...")
+					return errors.New("Reset after boss fight")
+				} else if bossResp.BossStatus == nil {
+					err = errors.New("Invalid Boss Response")
+					continue
+				}
+
+				if bossResp.WaitingForPlayers {
+					b.logger.Println("Waiting for players to join ...")
+				} else {
+					b.logger.Printf("Boss fight in progress - HP %d/%d\n", bossResp.BossStatus.BossHP, bossResp.BossStatus.BossMaxHP)
+				}
+
+				time.Sleep(5 * time.Second)
+				bossResp, err = b.reportBossDamage(bossResp)
+			} else {
+				err = errors.New("Invalid Boss Response")
+			}
+		}
+
+		if err != nil {
+			b.logger.Println("[Warn]", err.Error(), "- retry ", retry)
+		}
+	}
+
+	if retry == 10 {
+		return errors.New("Reset Boss fight after 10 fails")
+	}
+
 	player, err := b.getPlayerInfo()
 	if err != nil {
 		return err
 	}
-	if player.ActiveBossGame == "" {
-		if player.ActiveZoneGame != "" {
-			b.logger.Println("Quiting current game for a boss zone fight...")
-			if err = b.leaveGame(player.ActiveZoneGame); err != nil {
-				return err
-			}
-		}
-
-		b.logger.Printf("Joining zone %d for a boss fight...\n", zone.Position)
-		if err = b.joinZone(zone); err != nil {
-			return err
-		}
-		b.logger.Println("Successful.")
-	}
-	b.logger.Println("Attempt to report damages ...")
-
-	for gameover, err := b.reportBossDamage(false); !gameover; gameover, err = b.reportBossDamage(err == nil) {
-		if err != nil {
-			b.logger.Println("[Warn]", err.Error(), "- retry in 5s")
-		}
-		time.Sleep(5 * time.Second)
-	}
-
-	player, err = b.getPlayerInfo()
-	if err != nil {
-		return err
-	}
 	if player.ActiveBossGame != "" {
-		b.logger.Println("Boss Fight Completed, quiting ...")
+		b.logger.Println("Quiting Boss Fight ...")
 		if err = b.leaveGame(player.ActiveBossGame); err != nil {
 			return err
 		}
 	}
-	return nil
+	return errors.New("Reset after boss fight")
 }
 
-func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, error) {
+type BossResponse struct {
+	BossStatus *struct {
+		BossHP    int `json:"boss_hp"`
+		BossMaxHP int `json:"boss_max_hp"`
+	} `json:"boss_status"`
+	WaitingForPlayers bool `json:"waiting_for_players"`
+	GameOver          bool `json:"game_over"`
+}
+
+func (b *AccountHandler) reportBossDamage(bossResp *BossResponse) (*BossResponse, error) {
 	damageToBoss, useHeal := 0, 0
-	if gameStarted {
+	if bossResp == nil {
+		b.logger.Println("Initiating boss fight...")
+	} else if bossResp.BossStatus == nil {
+		return nil, errors.New("Invalid Boss Response")
+	} else if !bossResp.WaitingForPlayers {
 		damageToBoss, useHeal = 45, b.shouldUseHeal()
 	}
 	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+strconv.Itoa(useHeal)+"&damage_to_boss="+strconv.Itoa(damageToBoss)+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	buf := struct {
-		Response *struct {
-			BossStatus struct {
-				BossHP    int `json:"boss_hp"`
-				BossMaxHP int `json:"boss_map_hp"`
-			} `json:"boss_status"`
-			WaitingForPlayers bool `json:"waiting_for_players"`
-			GameOver          bool `json:"game_over"`
-		}
-	}{}
+	buf := struct{ Response *BossResponse }{}
 	if err = json.NewDecoder(res.Body).Decode(&buf); err != nil {
-		return false, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
+		return nil, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
 	}
-
 	if buf.Response == nil {
-		return false, errors.New("Failed Reporting Damage")
+		return nil, errors.New("Failed Reporting Damage")
 	}
-
-	if buf.Response.GameOver {
-		b.logger.Println("Boss is now dead.")
-		return true, nil
-	}
-
-	if buf.Response.WaitingForPlayers {
-		return false, errors.New("Waiting for boss fight players")
-	}
-
-	b.logger.Printf("Boss fight in progress - HP %d/%d\n", buf.Response.BossStatus.BossHP, buf.Response.BossStatus.BossMaxHP)
-	return false, nil
+	return buf.Response, nil
 }
 
 func (b *AccountHandler) shouldUseHeal() int {
