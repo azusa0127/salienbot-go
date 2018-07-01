@@ -294,7 +294,7 @@ func findZone(planet *Planet, zonePosition int) *Zone {
 }
 
 func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
-	if player.ActiveZoneGame == "" && player.ActiveBossGame == "" {
+	if player.ActiveZonePosition == "" {
 		return "", nil
 	}
 	acc.logger.Printf("Already in game zone %s for %d seconds, trying to recover...\n", player.ActiveZonePosition, player.TimeInZone)
@@ -429,7 +429,7 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Leaved planet " + planet.State.Name + " ...")
 	}
 
-	if player.ActiveBossGame != "" {
+	if player.ActiveBossGame != "" && player.ActiveZonePosition != "" {
 		zp, err := strconv.Atoi(player.ActiveZonePosition)
 		if err != nil {
 			return err
@@ -600,15 +600,11 @@ type BossResponse struct {
 }
 
 func (b *AccountHandler) reportBossDamage(bossResp *BossResponse) (*BossResponse, error) {
-	damageToBoss, useHeal := 0, 0
-	if bossResp == nil {
-		b.logger.Println("Initiating boss fight...")
-	} else if bossResp.BossStatus == nil {
-		return nil, errors.New("Invalid Boss Response")
-	} else if !bossResp.WaitingForPlayers {
-		damageToBoss, useHeal = 45, b.shouldUseHeal()
+	damageToBoss, useHeal := "0", "0"
+	if bossResp != nil && !bossResp.WaitingForPlayers {
+		damageToBoss, useHeal = "45", b.shouldUseHeal()
 	}
-	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+strconv.Itoa(useHeal)+"&damage_to_boss="+strconv.Itoa(damageToBoss)+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+useHeal+"&damage_to_boss="+damageToBoss+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -622,12 +618,12 @@ func (b *AccountHandler) reportBossDamage(bossResp *BossResponse) (*BossResponse
 	return buf.Response, nil
 }
 
-func (b *AccountHandler) shouldUseHeal() int {
+func (b *AccountHandler) shouldUseHeal() string {
 	if time.Since(b.lastHealUsed) > 120*time.Second {
 		b.lastHealUsed = time.Now()
-		return 1
+		return "1"
 	}
-	return 0
+	return "0"
 }
 
 func main() {
@@ -639,7 +635,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] 0.4.0-Beta.2 Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.4.0-Beta.3 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -661,5 +657,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.4.0-Beta.2 Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.4.0-Beta.3 Terminated - ", <-errc)
 }
