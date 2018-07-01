@@ -208,6 +208,9 @@ func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
 func chooseZone(p *Planet) (*Zone, error) {
 	var z Zone
 	for _, zone := range p.Zones {
+		if !zone.Captured && zone.BossActive {
+			return &z, nil
+		}
 		if !zone.Captured &&
 			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) &&
 			(z.GameID == "" || zone.Difficulty >= z.Difficulty) {
@@ -480,6 +483,7 @@ func (acc *AccountHandler) Start() {
 }
 
 func (b *AccountHandler) handleBossFight(zone *Zone) error {
+	b.logger.Println("Joining a boss zone...")
 	if !zone.BossActive {
 		return errors.New("Not an Active Boss Zone")
 	}
