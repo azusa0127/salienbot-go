@@ -284,6 +284,15 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 	return buf.Response.NewScore, nil
 }
 
+func findZone(planet *Planet, zonePosition int) *Zone {
+	for _, zone := range planet.Zones {
+		if zone.Position == zonePosition {
+			return &zone
+		}
+	}
+	return nil
+}
+
 func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
 	if player.ActiveZoneGame == "" && player.ActiveBossGame == "" {
 		return "", nil
@@ -384,7 +393,7 @@ func (acc *AccountHandler) round() error {
 		return err
 	}
 
-	if player.TimeInZone > 140 {
+	if player.ActiveZoneGame != "" && player.TimeInZone > 140 {
 		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
 		if err := acc.leaveGame(player.ActiveZoneGame); err != nil {
 			return err
@@ -421,10 +430,24 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Leaved planet " + planet.State.Name + " ...")
 	}
 
+	if player.ActiveBossGame != "" {
+		zp, err := strconv.Atoi(player.ActiveZonePosition)
+		if err != nil {
+			return err
+		}
+		err = acc.handleBossFight(findZone(planet, zp))
+		if err != nil {
+			return err
+		}
+		return errors.New("Boss fight complete, reseting")
+	}
+
 	if bestPlanetID != planet.ID {
 		acc.logger.Printf("A better planet with difficulty %d is available, leaving %s ...\n", bestDifficulty, planet.State.Name)
 		if player.ActiveZoneGame != "" {
 			acc.leaveGame(player.ActiveZoneGame)
+		} else if player.ActiveBossGame != "" {
+			acc.leaveGame(player.ActiveBossGame)
 		}
 		if err := acc.leaveGame(planet.ID); err != nil {
 			return err
@@ -516,9 +539,10 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 		if err = b.joinZone(zone); err != nil {
 			return err
 		}
+		b.logger.Println("Successful.")
 	}
 
-	for waiting, gameover, err := b.reportBossDamage(false); !gameover; waiting, gameover, err = b.reportBossDamage(!waiting) {
+	for gameover, err := b.reportBossDamage(false); !gameover; gameover, err = b.reportBossDamage(err == nil) {
 		if err != nil {
 			b.logger.Println("[Error] While Reporting Boss Damage -", err.Error(), "- retry in 5s")
 		}
@@ -538,14 +562,14 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 	return nil
 }
 
-func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, bool, error) {
+func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, error) {
 	damageToBoss, useHeal := 0, 0
 	if gameStarted {
 		damageToBoss, useHeal = 45, b.shouldUseHeal()
 	}
 	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+strconv.Itoa(useHeal)+"&damage_to_boss="+strconv.Itoa(damageToBoss)+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
 	if err != nil {
-		return false, false, err
+		return false, err
 	}
 	buf := struct {
 		Response struct {
@@ -558,24 +582,24 @@ func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, bool, error) 
 		}
 	}{}
 	if err = json.NewDecoder(res.Body).Decode(&buf); err != nil {
-		return false, false, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
+		return false, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
 	}
 
 	if buf.Response.GameOver {
 		b.logger.Println("Boss is now dead.")
-		return false, true, nil
+		return true, nil
 	}
 
 	if buf.Response.BossStatus == nil {
 		if buf.Response.WaitingForPlayers {
 			b.logger.Println("Waiting for boss fight players ...")
-			return true, false, nil
+			return false, nil
 		}
-		return false, false, errors.New("Failed Reporting Damage")
+		return false, errors.New("Failed Reporting Damage")
 	}
 
 	b.logger.Printf("Boss fight in progress - HP %d/%d\n", buf.Response.BossStatus.BossHP, buf.Response.BossStatus.BossMaxHP)
-	return false, false, nil
+	return false, nil
 }
 
 func (b *AccountHandler) shouldUseHeal() int {
@@ -595,7 +619,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] 0.4.0-Beta Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.4.0-Beta.2 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -617,5 +641,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.4.0-Beta Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.4.0-Beta.2 Terminated - ", <-errc)
 }
