@@ -224,7 +224,11 @@ func chooseZone(p *Planet) (*Zone, error) {
 }
 
 func (acc *AccountHandler) joinZone(zone *Zone) error {
-	res, err := httpClient.Post(gameURLPrefix+"/JoinZone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	boss := ""
+	if zone.BossActive {
+		boss = "Boss"
+	}
+	res, err := httpClient.Post(gameURLPrefix+"/Join"+boss+"Zone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
