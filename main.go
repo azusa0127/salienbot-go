@@ -209,7 +209,7 @@ func chooseZone(p *Planet) (*Zone, error) {
 	var z Zone
 	for _, zone := range p.Zones {
 		if !zone.Captured && zone.BossActive {
-			return &z, nil
+			return &zone, nil
 		}
 		if !zone.Captured &&
 			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) &&
