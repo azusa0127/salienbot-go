@@ -527,7 +527,7 @@ func (b *AccountHandler) reportBossDamage(gameStarted bool) (bool, bool, error) 
 	if gameStarted {
 		damageToBoss, useHeal = 45, b.shouldUseHeal()
 	}
-	res, err := httpClient.Post(fmt.Sprintf(`https://community.steam-api.com/ITerritoryControlMinigameService/ReportBossDamage/v0001/?access_token=%s&use_heal_ability=%d&damage_to_boss=%d&damage_taken=0`, b.steamToken, useHeal, damageToBoss), contentType, bytes.NewBuffer(nil))
+	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+strconv.Itoa(useHeal)+"&damage_to_boss="+strconv.Itoa(damageToBoss)+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return false, false, err
 	}
