@@ -281,7 +281,7 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 }
 
 func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
-	if player.ActiveZoneGame == "" {
+	if player.ActiveZoneGame == "" && player.ActiveBossGame == "" {
 		return "", nil
 	}
 	acc.logger.Printf("Already in game zone %s for %d seconds, trying to recover...\n", player.ActiveZonePosition, player.TimeInZone)
@@ -296,6 +296,14 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 			break
 		}
 	}
+
+	if player.ActiveBossGame != "" {
+		if err := acc.handleBossFight(target); err != nil {
+			return "", err
+		}
+		return "", errors.New("Boss fight complete, reseting")
+	}
+
 	if player.TimeInZone < 110 {
 		waitSeconds := 110 - player.TimeInZone
 		acc.logger.Printf("Submitting score(%.f) for zone %d(%d %.2f%%) in %d seconds...\n",
