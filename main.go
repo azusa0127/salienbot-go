@@ -504,7 +504,7 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 
 	for waiting, gameover, err := b.reportBossDamage(false); !gameover; waiting, gameover, err = b.reportBossDamage(!waiting) {
 		if err != nil {
-			b.logger.Println("[Error]ReportBossDamage", err.Error(), " retry in 5s")
+			b.logger.Println("[Error] While Reporting Boss Damage -", err.Error(), "- retry in 5s")
 		}
 		time.Sleep(5 * time.Second)
 	}
