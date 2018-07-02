@@ -130,6 +130,9 @@ func getBestAvailableDifficulty(p Planet) uint {
 	for _, z := range planet.Zones {
 		if !planetZoneBlacklist.IsBlacklisted(planet.ID, z.Position) && !z.Captured && z.Difficulty > bestDifficulty {
 			bestDifficulty = z.Difficulty
+		} else if !z.Captured && z.Type == 4 && z.BossActive {
+			// Boss Zone
+			bestDifficulty = 9
 		}
 	}
 	return uint(bestDifficulty)
@@ -139,6 +142,8 @@ type AccountHandler struct {
 	steamToken   string
 	logger       *log.Logger
 	roundCounter uint64
+	// BossFight Props
+	lastHealUsed time.Time
 }
 
 type Planet struct {
@@ -155,6 +160,7 @@ type Zone struct {
 	Position        int     `json:"zone_position"`
 	Captured        bool    `json:"captured"`
 	CaptureProgress float64 `json:"capture_progress"`
+	BossActive      bool    `json:"boss_active"`
 	GameID          string
 	Difficulty      int
 	Type            int
@@ -179,6 +185,7 @@ type Player struct {
 	ActivePlanet       string `json:"active_planet"`
 	ActiveZoneGame     string `json:"active_zone_game"`
 	ActiveZonePosition string `json:"active_zone_position"`
+	ActiveBossGame     string `json:"active_boss_game"`
 	TimeInZone         int    `json:"time_in_zone"`
 	Score              string
 	NextLevelScore     string `json:"next_level_score"`
@@ -201,6 +208,9 @@ func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
 func chooseZone(p *Planet) (*Zone, error) {
 	var z Zone
 	for _, zone := range p.Zones {
+		if !zone.Captured && zone.BossActive {
+			return &zone, nil
+		}
 		if !zone.Captured &&
 			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) &&
 			(z.GameID == "" || zone.Difficulty >= z.Difficulty) {
@@ -214,7 +224,11 @@ func chooseZone(p *Planet) (*Zone, error) {
 }
 
 func (acc *AccountHandler) joinZone(zone *Zone) error {
-	res, err := httpClient.Post(gameURLPrefix+"/JoinZone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
+	boss := ""
+	if zone.BossActive {
+		boss = "Boss"
+	}
+	res, err := httpClient.Post(gameURLPrefix+"/Join"+boss+"Zone/v0001/?zone_position="+strconv.Itoa(zone.Position)+"&access_token="+acc.steamToken, contentType, bytes.NewBuffer(nil))
 	if err != nil {
 		return err
 	}
@@ -270,8 +284,17 @@ func (acc *AccountHandler) submitScore(zone *Zone) (string, error) {
 	return buf.Response.NewScore, nil
 }
 
+func findZone(planet *Planet, zonePosition int) *Zone {
+	for _, zone := range planet.Zones {
+		if zone.Position == zonePosition {
+			return &zone
+		}
+	}
+	return nil
+}
+
 func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (string, error) {
-	if player.ActiveZoneGame == "" {
+	if player.ActiveZonePosition == "" {
 		return "", nil
 	}
 	acc.logger.Printf("Already in game zone %s for %d seconds, trying to recover...\n", player.ActiveZonePosition, player.TimeInZone)
@@ -286,6 +309,13 @@ func (acc *AccountHandler) existingGameHandle(player *Player, zones []Zone) (str
 			break
 		}
 	}
+
+	if player.ActiveBossGame != "" {
+		if err := acc.handleBossFight(target); err != nil {
+			return "", err
+		}
+	}
+
 	if player.TimeInZone < 110 {
 		waitSeconds := 110 - player.TimeInZone
 		acc.logger.Printf("Submitting score(%.f) for zone %d(%d %.2f%%) in %d seconds...\n",
@@ -333,9 +363,11 @@ func (acc *AccountHandler) leaveGame(gameID string) error {
 }
 
 func (acc *AccountHandler) zoneJoinHandle(nextZone *Zone, planet *Planet) error {
-	retry := 0
-	for retry < 3 {
-		retry++
+	if nextZone.BossActive && !nextZone.Captured {
+		return acc.handleBossFight(nextZone)
+	}
+
+	for retry := 0; retry < 3; retry++ {
 		if err := acc.joinZone(nextZone); err == nil {
 			return nil
 		}
@@ -360,7 +392,7 @@ func (acc *AccountHandler) round() error {
 		return err
 	}
 
-	if player.TimeInZone > 140 {
+	if player.ActiveZoneGame != "" && player.TimeInZone > 140 {
 		acc.logger.Printf("Stucking in a game for %d seconds, trying to reset...\n", player.TimeInZone)
 		if err := acc.leaveGame(player.ActiveZoneGame); err != nil {
 			return err
@@ -397,10 +429,24 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Leaved planet " + planet.State.Name + " ...")
 	}
 
+	if player.ActiveBossGame != "" && player.ActiveZonePosition != "" {
+		zp, err := strconv.Atoi(player.ActiveZonePosition)
+		if err != nil {
+			return err
+		}
+		err = acc.handleBossFight(findZone(planet, zp))
+		if err != nil {
+			return err
+		}
+		return errors.New("Boss fight complete, reseting")
+	}
+
 	if bestPlanetID != planet.ID {
 		acc.logger.Printf("A better planet with difficulty %d is available, leaving %s ...\n", bestDifficulty, planet.State.Name)
 		if player.ActiveZoneGame != "" {
 			acc.leaveGame(player.ActiveZoneGame)
+		} else if player.ActiveBossGame != "" {
+			acc.leaveGame(player.ActiveBossGame)
 		}
 		if err := acc.leaveGame(planet.ID); err != nil {
 			return err
@@ -450,8 +496,9 @@ func (acc *AccountHandler) round() error {
 
 func NewAccountHandler(token string) *AccountHandler {
 	return &AccountHandler{
-		steamToken: token,
-		logger:     log.New(os.Stdout, "SalienBot|"+token[:6]+"|", log.Ltime),
+		steamToken:   token,
+		logger:       log.New(os.Stdout, "SalienBot|"+token[:6]+"|", log.Ltime),
+		lastHealUsed: time.Now(),
 	}
 }
 
@@ -469,6 +516,116 @@ func (acc *AccountHandler) Start() {
 	}()
 }
 
+func (b *AccountHandler) handleBossFight(zone *Zone) error {
+	b.logger.Println("Joining a boss zone...")
+	if !zone.BossActive {
+		return errors.New("Not an Active Boss Zone")
+	}
+
+	var retry uint
+	for retry = 0; retry < 10; retry++ {
+		player, err := b.getPlayerInfo()
+		if err != nil {
+			return err
+		}
+		if player.ActiveBossGame == "" {
+			if player.ActiveZoneGame != "" {
+				b.logger.Println("Quiting current game for a boss zone fight...")
+				if err = b.leaveGame(player.ActiveZoneGame); err != nil {
+					return err
+				}
+			}
+
+			b.logger.Printf("Joining zone %d for a boss fight...\n", zone.Position)
+			if err = b.joinZone(zone); err != nil {
+				return err
+			}
+			b.logger.Println("Successful.")
+		}
+		b.logger.Println("Attempt to report damages ...")
+
+		bossResp, err := b.reportBossDamage(nil)
+		for err == nil {
+			if bossResp != nil {
+				if bossResp.GameOver {
+					b.logger.Println("Boss fight is over ...")
+					return errors.New("Reset after boss fight")
+				} else if bossResp.BossStatus == nil {
+					err = errors.New("Invalid Boss Response")
+					continue
+				}
+
+				if bossResp.WaitingForPlayers {
+					b.logger.Println("Waiting for players to join ...")
+				} else {
+					b.logger.Printf("Boss fight in progress - HP %d/%d\n", bossResp.BossStatus.BossHP, bossResp.BossStatus.BossMaxHP)
+				}
+
+				time.Sleep(5 * time.Second)
+				bossResp, err = b.reportBossDamage(bossResp)
+			} else {
+				err = errors.New("Invalid Boss Response")
+			}
+		}
+
+		if err != nil {
+			b.logger.Println("[Warn]", err.Error(), "- retry ", retry)
+		}
+	}
+
+	if retry == 10 {
+		return errors.New("Reset Boss fight after 10 fails")
+	}
+
+	player, err := b.getPlayerInfo()
+	if err != nil {
+		return err
+	}
+	if player.ActiveBossGame != "" {
+		b.logger.Println("Quiting Boss Fight ...")
+		if err = b.leaveGame(player.ActiveBossGame); err != nil {
+			return err
+		}
+	}
+	return errors.New("Reset after boss fight")
+}
+
+type BossResponse struct {
+	BossStatus *struct {
+		BossHP    int `json:"boss_hp"`
+		BossMaxHP int `json:"boss_max_hp"`
+	} `json:"boss_status"`
+	WaitingForPlayers bool `json:"waiting_for_players"`
+	GameOver          bool `json:"game_over"`
+}
+
+func (b *AccountHandler) reportBossDamage(bossResp *BossResponse) (*BossResponse, error) {
+	damageToBoss, useHeal := "0", "0"
+	if bossResp != nil && !bossResp.WaitingForPlayers {
+		damageToBoss, useHeal = "45", b.shouldUseHeal()
+	}
+	res, err := httpClient.Post(gameURLPrefix+"/ReportBossDamage/v0001/?access_token="+b.steamToken+"&use_heal_ability="+useHeal+"&damage_to_boss="+damageToBoss+"&damage_taken=0", contentType, bytes.NewBuffer(nil))
+	if err != nil {
+		return nil, err
+	}
+	buf := struct{ Response *BossResponse }{}
+	if err = json.NewDecoder(res.Body).Decode(&buf); err != nil {
+		return nil, errors.New("[Connection Fail]Invalid response received when reporting boss damage")
+	}
+	if buf.Response == nil {
+		return nil, errors.New("Failed Reporting Damage")
+	}
+	return buf.Response, nil
+}
+
+func (b *AccountHandler) shouldUseHeal() string {
+	if time.Since(b.lastHealUsed) > 120*time.Second {
+		b.lastHealUsed = time.Now()
+		return "1"
+	}
+	return "0"
+}
+
 func main() {
 	var steamTokens string
 	flag.StringVar(&steamTokens, "token", os.Getenv("STEAM_TOKEN"), "Steam token value from https://steamcommunity.com/saliengame/gettoken")
@@ -478,7 +635,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] 0.3.2 Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.4.0-Beta.3 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -500,5 +657,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.3.2 Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.4.0-Beta.3 Terminated - ", <-errc)
 }
