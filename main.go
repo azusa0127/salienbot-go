@@ -635,7 +635,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] 0.4.0-Beta.3 Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.4.0 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -657,5 +657,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.4.0-Beta.3 Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.4.0 Terminated - ", <-errc)
 }
