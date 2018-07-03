@@ -38,7 +38,7 @@ const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/Leav
 var planetZoneBlacklist = PlanetZoneBlackList{blacklist: make(map[string]map[int]bool)}
 var bestAvailablePlanet = BestAvailablePlanet{ttl: 5 * time.Minute}
 
-var endGameDeadline = time.Date(2018, 07, 04, 17, 05, 0, 0, time.UTC)
+var endGameDeadline = time.Date(2018, 07, 04, 17, 0, 0, 0, time.UTC)
 
 type PlanetZoneBlackList struct {
 	mutex     sync.RWMutex
