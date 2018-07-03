@@ -56,7 +56,7 @@ Windows可执行文件
 
 *停止并删除docker容器和镜像*
 ```bash
-docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go") && docker rmi -f azusa0127/salienbot-go
+docker rm -f $(docker ps -a -q --filter="ancestor=azusa0127/salienbot-go") && docker rmi -f $(docker image ls --filter "reference=azusa0127/salienbot-go" -q)
 ```
 
 *前台*
