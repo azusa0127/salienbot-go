@@ -484,12 +484,17 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Leaved planet " + planet.State.Name + " for a better planet...")
 	}
 
+	maxExp := player.NextLevelScore
+	if maxExp == "" {
+		maxExp = "???"
+	}
+
 	acc.logger.Printf("Planet:%s|Progress:%.2f%%|Level:%d|Exp:%s/%s\n",
 		planet.State.Name,
 		planet.State.Progress*100,
 		player.Level,
 		player.Score,
-		player.NextLevelScore)
+		maxExp)
 	var newScore string
 	if newScore, err = acc.existingGameHandle(player, planet.Zones); err != nil {
 		return err
@@ -603,6 +608,7 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 
 		if err != nil {
 			b.logger.Println("[Warn]", err.Error(), "- retry ", retry)
+			time.Sleep(5 * time.Second)
 		}
 	}
 
