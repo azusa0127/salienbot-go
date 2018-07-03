@@ -38,6 +38,8 @@ const leaveGameEndpoint = "https://community.steam-api.com/IMiniGameService/Leav
 var planetZoneBlacklist = PlanetZoneBlackList{blacklist: make(map[string]map[int]bool)}
 var bestAvailablePlanet = BestAvailablePlanet{ttl: 5 * time.Minute}
 
+var endGameDeadline = time.Date(2018, 07, 04, 17, 0, 0, 0, time.UTC)
+
 type PlanetZoneBlackList struct {
 	mutex     sync.RWMutex
 	blacklist map[string]map[int]bool
@@ -68,6 +70,7 @@ type BestAvailablePlanet struct {
 	bestPlanetID string
 	difficulty   uint
 	lastUpdateAt time.Time
+	worstPlanet  *Planet
 }
 
 func (b *BestAvailablePlanet) Get() (string, uint, error) {
@@ -113,6 +116,25 @@ func getBestAvailablePlanet() (string, uint, error) {
 	}
 	log.Printf("  (Best Planet) %s (%d) - %.2f%%\n", bestPlanet.State.Name, bestDifficulty, bestPlanet.State.Progress*100)
 	return bestPlanet.ID, bestDifficulty, nil
+}
+
+func getMostProgressedPlanet() (*Planet, error) {
+	res, err := httpClient.Get(activePlanetsEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	buf := struct{ Response struct{ Planets []Planet } }{}
+	err = json.NewDecoder(res.Body).Decode(&buf)
+	if err != nil {
+		return nil, errors.New("[Connection Fail]Invalid response received when getting planets")
+	}
+	var worstPlanet Planet
+	for _, p := range buf.Response.Planets {
+		if p.State.Active && !p.State.Captured && p.State.Progress >= worstPlanet.State.Progress {
+			worstPlanet = p
+		}
+	}
+	return &worstPlanet, nil
 }
 
 func getBestAvailableDifficulty(p Planet) uint {
@@ -205,18 +227,22 @@ func (acc *AccountHandler) getPlayerInfo() (*Player, error) {
 	return &buf.Response, nil
 }
 
-func chooseZone(p *Planet) (*Zone, error) {
+func chooseZone(p *Planet, player *Player) (*Zone, error) {
 	var z Zone
 	for _, zone := range p.Zones {
-		if !zone.Captured && zone.BossActive {
+		if player.Level != 25 && !zone.Captured && zone.BossActive {
 			return &zone, nil
 		}
 		if !zone.Captured &&
-			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) &&
-			(z.GameID == "" || zone.Difficulty >= z.Difficulty) {
-			z = zone
+			!planetZoneBlacklist.IsBlacklisted(p.ID, zone.Position) {
+			if z.GameID == "" ||
+				(player.Level != 25 && zone.Difficulty >= z.Difficulty) ||
+				(player.Level == 25 && zone.Difficulty <= z.Difficulty) {
+				z = zone
+			}
 		}
 	}
+
 	if z.GameID == "" {
 		return nil, errors.New("No available zone in the planet")
 	}
@@ -406,7 +432,11 @@ func (acc *AccountHandler) round() error {
 
 	var planet *Planet
 	if player.ActivePlanet == "" {
-		planet, err = getPlanetInfo(bestPlanetID)
+		if player.Level == 25 {
+			planet, err = getMostProgressedPlanet()
+		} else {
+			planet, err = getPlanetInfo(bestPlanetID)
+		}
 		if err != nil {
 			return err
 		}
@@ -441,7 +471,7 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Boss fight complete, reseting")
 	}
 
-	if bestPlanetID != planet.ID {
+	if player.Level != 25 && bestPlanetID != planet.ID {
 		acc.logger.Printf("A better planet with difficulty %d is available, leaving %s ...\n", bestDifficulty, planet.State.Name)
 		if player.ActiveZoneGame != "" {
 			acc.leaveGame(player.ActiveZoneGame)
@@ -454,19 +484,24 @@ func (acc *AccountHandler) round() error {
 		return errors.New("Leaved planet " + planet.State.Name + " for a better planet...")
 	}
 
+	maxExp := player.NextLevelScore
+	if maxExp == "" {
+		maxExp = "???"
+	}
+
 	acc.logger.Printf("Planet:%s|Progress:%.2f%%|Level:%d|Exp:%s/%s\n",
 		planet.State.Name,
 		planet.State.Progress*100,
 		player.Level,
 		player.Score,
-		player.NextLevelScore)
+		maxExp)
 	var newScore string
 	if newScore, err = acc.existingGameHandle(player, planet.Zones); err != nil {
 		return err
 	}
 	if newScore == "" {
 		var nextZone *Zone
-		if nextZone, err = chooseZone(planet); err != nil {
+		if nextZone, err = chooseZone(planet, player); err != nil {
 			acc.logger.Println(err.Error(), ", leaving plannet")
 			if err = acc.leaveGame(player.ActivePlanet); err != nil {
 				return err
@@ -512,6 +547,9 @@ func (acc *AccountHandler) Start() {
 				waitTime = 8 * time.Second
 			}
 			time.Sleep(waitTime)
+			if time.Now().After(endGameDeadline) {
+				log.Fatalln("The Salien Game event is now over, thanks for using salienbot!")
+			}
 		}
 	}()
 }
@@ -570,6 +608,7 @@ func (b *AccountHandler) handleBossFight(zone *Zone) error {
 
 		if err != nil {
 			b.logger.Println("[Warn]", err.Error(), "- retry ", retry)
+			time.Sleep(5 * time.Second)
 		}
 	}
 
@@ -635,7 +674,7 @@ func main() {
 	}
 	errc := make(chan error)
 	go func() {
-		log.Println("[SalienBot] 0.4.0 Listening to terminate signal ctrl-c...")
+		log.Println("[SalienBot] 0.5.0 Listening to terminate signal ctrl-c...")
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("Signal %v", <-c)
@@ -657,5 +696,5 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	log.Println("[SalienBot] 0.4.0 Terminated - ", <-errc)
+	log.Println("[SalienBot] 0.5.0 Terminated - ", <-errc)
 }
